@@ -1,39 +1,63 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MAX_INPUT_LENGTH } from '@/types/layout';
-import { getTemplateById } from '@/data/templates';
+import { getPreset } from '@/data/effectPresets';
 import { useTextLayoutStore } from '@/features/text-layout/store';
-import { LayoutCanvas } from '@/features/text-layout/LayoutCanvas';
-import { TemplatePicker } from '@/features/text-layout/TemplatePicker';
-import { exportCanvasToPng } from '@/features/text-layout/exportImage';
+import { LayoutCanvas, type LayoutCanvasHandle } from '@/features/text-layout/LayoutCanvas';
+import { ModePicker } from '@/features/text-layout/ModePicker';
+import { ParamControls } from '@/features/text-layout/ParamControls';
+import { downloadDataUrl } from '@/features/text-layout/exportImage';
 
-/** 预览缩放：把 1080 宽缩到约 360 显示。 */
-const PREVIEW_SCALE = 360 / 1080;
+const PREVIEW_WIDTH = 420;
 
 export function TextLayoutPage() {
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<LayoutCanvasHandle>(null);
+  const [exporting, setExporting] = useState(false);
   const {
     inputText,
-    templateId,
-    schema,
+    mode,
+    params,
+    image,
+    imageName,
     status,
     errorMessage,
     setInputText,
-    setTemplateId,
+    setMode,
+    setParam,
+    setImage,
+    reseed,
     runExtract,
   } = useTextLayoutStore();
 
-  const template = getTemplateById(templateId);
+  const preset = getPreset(mode);
   const overLimit = inputText.length > MAX_INPUT_LENGTH;
   const canExtract = inputText.trim().length > 0 && !overLimit && status !== 'extracting';
+  const hasContent = inputText.trim().length > 0 && !overLimit;
 
-  const handleExport = async () => {
+  const handleImageUpload = (file: File | undefined) => {
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => setImage(img, file.name);
+    img.onerror = () => {
+      console.error('image.load.failed', file.name);
+      alert('图片加载失败，请换一张');
+    };
+    img.src = URL.createObjectURL(file);
+  };
+
+  const handleExport = () => {
     if (!canvasRef.current) return;
+    setExporting(true);
     try {
-      await exportCanvasToPng(canvasRef.current, 'text-layout-1080x1440.png');
+      const dataUrl = canvasRef.current.exportPng(2);
+      if (dataUrl) {
+        downloadDataUrl(dataUrl, `text-layout-${mode}-1080x810.png`);
+      }
     } catch (e) {
       console.error('export.failed', e);
       alert('导出失败，请重试');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -45,7 +69,7 @@ export function TextLayoutPage() {
         </Link>
         <h1 className="mt-1 text-xl font-bold text-neutral-900">文字自动化排版</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          输入文字（≤{MAX_INPUT_LENGTH} 字）→ 抽取排版结构 → 选模板 → 导出 3:4 文字图片
+          输入文字（≤{MAX_INPUT_LENGTH} 字）→ 选特效 → 微调 → 导出 4:3 文字图片（1080×810）
         </p>
       </header>
 
@@ -57,8 +81,8 @@ export function TextLayoutPage() {
             <textarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder="粘贴或输入产品文案，支持换行分段、- 列表、引号金句…"
-              rows={10}
+              placeholder="输入产品文案，支持换行分段…"
+              rows={6}
               className="w-full resize-none rounded-lg border border-neutral-300 p-4 text-sm leading-relaxed focus:border-neutral-900 focus:outline-none"
             />
             <div className="mt-1 flex justify-between text-xs">
@@ -75,7 +99,7 @@ export function TextLayoutPage() {
             disabled={!canExtract}
             className="rounded-lg bg-neutral-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-neutral-300"
           >
-            {status === 'extracting' ? '抽取中…' : '抽取排版结构'}
+            {status === 'extracting' ? '抽取中…' : '抽取并推荐特效'}
           </button>
 
           {status === 'error' && (
@@ -83,23 +107,52 @@ export function TextLayoutPage() {
           )}
 
           <div>
-            <label className="mb-2 block text-sm font-semibold text-neutral-700">排版模板</label>
-            <TemplatePicker selectedId={templateId} onSelect={setTemplateId} />
+            <label className="mb-2 block text-sm font-semibold text-neutral-700">排版特效</label>
+            <ModePicker selected={mode} onSelect={setMode} />
+          </div>
+
+          {preset.needsImage && (
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-neutral-700">
+                上传形状图片
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleImageUpload(e.target.files?.[0])}
+                className="block w-full text-sm text-neutral-600 file:mr-3 file:rounded file:border-0 file:bg-neutral-900 file:px-4 file:py-2 file:text-white"
+              />
+              <p className="mt-1 text-xs text-neutral-400">
+                {imageName ? `已上传：${imageName}` : '建议黑白剪影或对比强烈的形状，文字会填进暗部。'}
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-neutral-700">参数微调</label>
+            <ParamControls mode={mode} params={params} onChange={setParam} onReseed={reseed} />
           </div>
         </section>
 
         {/* 右侧：预览与导出 */}
         <section className="flex flex-col items-center gap-5">
-          <div className="text-sm font-semibold text-neutral-700">预览（3:4 · 1080×1440）</div>
-          <div
-            className="overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-sm"
-            style={{ width: 1080 * PREVIEW_SCALE, height: 1440 * PREVIEW_SCALE }}
-          >
-            {schema ? (
-              <LayoutCanvas ref={canvasRef} schema={schema} template={template} scale={PREVIEW_SCALE} />
+          <div className="text-sm font-semibold text-neutral-700">预览（4:3 · 1080×810）</div>
+          <div className="overflow-hidden rounded-lg border border-neutral-300 shadow-sm">
+            {hasContent ? (
+              <LayoutCanvas
+                ref={canvasRef}
+                mode={mode}
+                text={inputText}
+                params={params}
+                image={image}
+                displayWidth={PREVIEW_WIDTH}
+              />
             ) : (
-              <div className="flex h-full items-center justify-center px-6 text-center text-sm text-neutral-400">
-                抽取后在此预览排版效果
+              <div
+                className="flex items-center justify-center bg-white px-6 text-center text-sm text-neutral-400"
+                style={{ width: PREVIEW_WIDTH, height: (PREVIEW_WIDTH * 810) / 1080 }}
+              >
+                输入文字后在此预览特效
               </div>
             )}
           </div>
@@ -107,10 +160,10 @@ export function TextLayoutPage() {
           <button
             type="button"
             onClick={handleExport}
-            disabled={!schema}
+            disabled={!hasContent || exporting}
             className="rounded-lg border border-neutral-900 px-5 py-3 text-sm font-semibold text-neutral-900 transition hover:bg-neutral-900 hover:text-white disabled:cursor-not-allowed disabled:border-neutral-300 disabled:text-neutral-300"
           >
-            导出 PNG
+            {exporting ? '导出中…' : '导出 PNG'}
           </button>
         </section>
       </main>

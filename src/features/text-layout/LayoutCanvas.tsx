@@ -1,69 +1,63 @@
-import { forwardRef } from 'react';
-import type { CSSProperties } from 'react';
-import type { LayoutBlock, LayoutSchema } from '@/types/layout';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import type { EffectMode, EffectParams } from '@/types/layout';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '@/types/layout';
-import type { TemplateDefinition } from '@/types/template';
+import { renderLayout } from './renderer';
 
 interface LayoutCanvasProps {
-  schema: LayoutSchema;
-  template: TemplateDefinition;
-  /** 显示缩放比例（导出时传 1 拿原始尺寸）。默认按容器宽度自适应由外层控制。 */
-  scale?: number;
+  mode: EffectMode;
+  text: string;
+  params: EffectParams;
+  image?: HTMLImageElement | null;
+  fontWeight?: string;
+  /** CSS 显示宽度（高度按 4:3 自动）。内部像素始终 1080×810。 */
+  displayWidth: number;
 }
 
-function renderBlock(block: LayoutBlock, template: TemplateDefinition) {
-  const style = template.roleStyles[block.role] as CSSProperties | undefined;
-
-  switch (block.role) {
-    case 'divider':
-      return (
-        <hr
-          key={block.id}
-          style={{ border: 'none', borderTop: '2px solid currentColor', opacity: 0.3, width: '100%' }}
-        />
-      );
-    case 'list':
-      return (
-        <ul key={block.id} style={{ ...style, margin: 0, paddingLeft: '1.2em' }}>
-          {(block.items ?? []).map((item, i) => (
-            <li key={i} style={{ marginBottom: '0.4em' }}>
-              {item}
-            </li>
-          ))}
-        </ul>
-      );
-    default:
-      return (
-        <div key={block.id} style={style}>
-          {block.text}
-        </div>
-      );
-  }
+export interface LayoutCanvasHandle {
+  /** 导出高清 PNG dataURL（scale 倍像素）。 */
+  exportPng: (scale?: number) => string | null;
 }
 
 /**
- * 3:4 文字排版画布。内部固定 1080*1440，通过 transform scale 缩放显示，
- * 保证预览与导出像素一致。
+ * 4:3 文字排版画布（Canvas 2D）。
+ * 内部固定 1080×810 像素，通过 CSS 缩放显示；导出时按需放大重绘。
  */
-export const LayoutCanvas = forwardRef<HTMLDivElement, LayoutCanvasProps>(
-  ({ schema, template, scale = 1 }, ref) => {
+export const LayoutCanvas = forwardRef<LayoutCanvasHandle, LayoutCanvasProps>(
+  ({ mode, text, params, image = null, fontWeight = '400', displayWidth }, ref) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      canvas.width = CANVAS_WIDTH;
+      canvas.height = CANVAS_HEIGHT;
+      renderLayout(canvas, { mode, text, params, image, scale: 1, fontWeight });
+    }, [mode, text, params, image, fontWeight]);
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        exportPng: (scale = 2) => {
+          // 用离屏画布按 scale 倍重绘，保证导出清晰
+          const out = document.createElement('canvas');
+          out.width = CANVAS_WIDTH * scale;
+          out.height = CANVAS_HEIGHT * scale;
+          renderLayout(out, { mode, text, params, image, scale, fontWeight });
+          return out.toDataURL('image/png');
+        },
+      }),
+      [mode, text, params, image, fontWeight],
+    );
+
     return (
-      <div
-        ref={ref}
+      <canvas
+        ref={canvasRef}
         style={{
-          width: CANVAS_WIDTH,
-          height: CANVAS_HEIGHT,
-          transform: `scale(${scale})`,
-          transformOrigin: 'top left',
-          overflow: 'hidden',
-          boxSizing: 'border-box',
-          ...template.canvasStyle,
+          width: displayWidth,
+          height: (displayWidth * CANVAS_HEIGHT) / CANVAS_WIDTH,
+          display: 'block',
         }}
-      >
-        <div style={{ width: '100%', height: '100%', boxSizing: 'border-box', ...template.contentStyle }}>
-          {schema.blocks.map((block) => renderBlock(block, template))}
-        </div>
-      </div>
+      />
     );
   },
 );

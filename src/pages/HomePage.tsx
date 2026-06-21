@@ -13,7 +13,7 @@ const TOOLS: ToolEntry[] = [
   {
     id: 'text-layout',
     name: '文字自动化排版',
-    description: '输入文字，抽取排版结构并套模板，产出 3:4 文字图片。',
+    description: '输入文字，套用雨落/弹幕/泪水/图片填充等特效，产出 4:3 文字图片。',
     path: '/tools/text-layout',
     status: 'available',
   },
