@@ -25,6 +25,14 @@ export type EffectMode =
   | 'tearBlur' // 泪水模糊
   | 'imageFill'; // 图片填充字
 
+/** imageFill 的填充形状来源。 */
+export type FillShape =
+  | 'heart' // 爱心
+  | 'star' // 星星
+  | 'circle' // 圆形
+  | 'diamond' // 菱形
+  | 'image'; // 上传图片
+
 /**
  * 特效渲染参数。所有可调旋钮收在这里，渲染算法只读这份参数。
  * 数值基于 1080*810 画布；导出高清时由渲染器统一缩放。
@@ -61,7 +69,9 @@ export interface EffectParams {
 
   /** imageFill：填充方向 */
   fillDirection: 'horizontal' | 'vertical';
-  /** imageFill：图片明暗阈值(0-255)，低于阈值视为形状内部 */
+  /** imageFill：填充形状（内置形状或上传图片） */
+  fillShape: FillShape;
+  /** imageFill：上传图片明暗阈值(0-255)，低于阈值视为形状内部（仅 fillShape='image' 用） */
   imageThreshold: number;
 }
 

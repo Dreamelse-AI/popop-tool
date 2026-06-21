@@ -23,6 +23,7 @@ const BASE: EffectParams = {
   tearBlurRadius: 90,
   spread: 50,
   fillDirection: 'horizontal',
+  fillShape: 'heart',
   imageThreshold: 128,
 };
 
@@ -74,8 +75,8 @@ export const EFFECT_PRESETS: EffectPreset[] = [
   {
     mode: 'imageFill',
     name: '图片填充字',
-    description: '上传图形轮廓，文字填满形状内部（需上传图片）。',
-    needsImage: true,
+    description: '文字填满形状内部，内置爱心/星星/圆形/菱形，也可上传图片。',
+    needsImage: false,
     swatch: '#7dbd8a',
     params: {
       ...BASE,
@@ -84,6 +85,7 @@ export const EFFECT_PRESETS: EffectPreset[] = [
       minSize: 22,
       maxSize: 22,
       padding: 40,
+      fillShape: 'heart',
       imageThreshold: 128,
       fillDirection: 'horizontal',
     },

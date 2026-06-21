@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MAX_INPUT_LENGTH } from '@/types/layout';
-import { getPreset } from '@/data/effectPresets';
 import { useTextLayoutStore } from '@/features/text-layout/store';
 import { LayoutCanvas, type LayoutCanvasHandle } from '@/features/text-layout/LayoutCanvas';
 import { ModePicker } from '@/features/text-layout/ModePicker';
@@ -29,7 +28,6 @@ export function TextLayoutPage() {
     runExtract,
   } = useTextLayoutStore();
 
-  const preset = getPreset(mode);
   const overLimit = inputText.length > MAX_INPUT_LENGTH;
   const canExtract = inputText.trim().length > 0 && !overLimit && status !== 'extracting';
   const hasContent = inputText.trim().length > 0 && !overLimit;
@@ -111,7 +109,7 @@ export function TextLayoutPage() {
             <ModePicker selected={mode} onSelect={setMode} />
           </div>
 
-          {preset.needsImage && (
+          {mode === 'imageFill' && params.fillShape === 'image' && (
             <div>
               <label className="mb-2 block text-sm font-semibold text-neutral-700">
                 上传形状图片

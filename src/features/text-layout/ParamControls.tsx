@@ -1,4 +1,4 @@
-import type { EffectMode, EffectParams } from '@/types/layout';
+import type { EffectMode, EffectParams, FillShape } from '@/types/layout';
 
 interface ParamControlsProps {
   mode: EffectMode;
@@ -33,8 +33,7 @@ const SLIDERS_BY_MODE: Record<EffectMode, SliderDef[]> = {
     { key: 'padding', label: '边距', min: 0, max: 160, unit: 'px' },
   ],
   tearBlur: [
-    { key: 'minSize', label: '最小字号', min: 20, max: 100, unit: 'px' },
-    { key: 'maxSize', label: '最大字号', min: 30, max: 140, unit: 'px' },
+    { key: 'minSize', label: '字号', min: 20, max: 120, unit: 'px' },
     { key: 'blur', label: '模糊强度', min: 1, max: 30, unit: 'px' },
     { key: 'tearBlurRadius', label: '模糊圆大小', min: 30, max: 240, unit: 'px' },
     { key: 'spread', label: '分散程度', min: 0, max: 100, unit: '%' },
@@ -43,10 +42,18 @@ const SLIDERS_BY_MODE: Record<EffectMode, SliderDef[]> = {
   ],
   imageFill: [
     { key: 'minSize', label: '字号', min: 12, max: 48, unit: 'px' },
-    { key: 'imageThreshold', label: '图片阈值', min: 0, max: 255 },
     { key: 'padding', label: '边距', min: 0, max: 160, unit: 'px' },
   ],
 };
+
+/** imageFill 形状选项。 */
+const FILL_SHAPES: Array<{ value: FillShape; label: string }> = [
+  { value: 'heart', label: '爱心' },
+  { value: 'star', label: '星星' },
+  { value: 'circle', label: '圆形' },
+  { value: 'diamond', label: '菱形' },
+  { value: 'image', label: '上传图片' },
+];
 
 export function ParamControls({ mode, params, onChange, onReseed }: ParamControlsProps) {
   const sliders = SLIDERS_BY_MODE[mode];
@@ -75,6 +82,45 @@ export function ParamControls({ mode, params, onChange, onReseed }: ParamControl
           </label>
         ))}
       </div>
+
+      {mode === 'imageFill' && (
+        <label className="block text-xs text-neutral-600">
+          <span className="mb-1 block">填充形状</span>
+          <div className="flex flex-wrap gap-2">
+            {FILL_SHAPES.map((shape) => (
+              <button
+                key={shape.value}
+                type="button"
+                onClick={() => onChange('fillShape', shape.value)}
+                className={`rounded border px-3 py-2 text-xs transition ${
+                  params.fillShape === shape.value
+                    ? 'border-neutral-900 bg-neutral-900 text-white'
+                    : 'border-neutral-300 text-neutral-600 hover:border-neutral-500'
+                }`}
+              >
+                {shape.label}
+              </button>
+            ))}
+          </div>
+        </label>
+      )}
+
+      {mode === 'imageFill' && params.fillShape === 'image' && (
+        <label className="block text-xs text-neutral-600">
+          <span className="mb-1 flex justify-between">
+            <span>图片阈值</span>
+            <span className="tabular-nums text-neutral-400">{params.imageThreshold}</span>
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={255}
+            value={params.imageThreshold}
+            onChange={(e) => onChange('imageThreshold', Number(e.target.value))}
+            className="w-full accent-neutral-900"
+          />
+        </label>
+      )}
 
       {mode === 'imageFill' && (
         <label className="block text-xs text-neutral-600">

@@ -1,15 +1,38 @@
 import type { EffectParams } from '@/types/layout';
 import { clamp, mulberry32, randomBetween, type RenderContext } from './shared';
 
-/** 取整段文字按换行拆成多行字符串（保留原顺序，去空行）。 */
-function sourceLines(text: string): string[] {
+/** 取整段文字按换行拆成多段（强制分段），去空行。 */
+function paragraphs(text: string): string[] {
   const raw = text
     .split(/\n+/)
     .map((line) => line.trim())
     .filter(Boolean);
-  if (raw.length) return raw;
-  const t = text.replace(/\s+/g, '').trim();
-  return t ? [t] : ['字'];
+  return raw.length ? raw : ['字'];
+}
+
+/**
+ * 按最大宽度对一段文字自动换行（中文逐字断行，英文按词尽量不拆）。
+ * 返回换行后的多行字符串。
+ */
+function wrapParagraph(
+  measure: (s: string) => number,
+  paragraph: string,
+  maxWidth: number,
+): string[] {
+  const lines: string[] = [];
+  let current = '';
+
+  for (const char of paragraph) {
+    const tentative = current + char;
+    if (current && measure(tentative) > maxWidth) {
+      lines.push(current);
+      current = char;
+    } else {
+      current = tentative;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : [paragraph];
 }
 
 /** 创建离屏画布。 */
@@ -26,35 +49,27 @@ function offscreen(width: number, height: number): {
 }
 
 /**
- * 泪水模糊：文字正常居中排版，再叠加若干径向渐变圆做遮罩，
- * 圆内模糊、圆外清晰，像泪水晕开局部。
+ * 泪水模糊：设定字号后文字自动换行居中排版，
+ * 再叠加若干径向渐变圆做遮罩，圆内模糊、圆外清晰，像泪水晕开局部。
  */
 export function drawTearBlur(rc: RenderContext, text: string, params: EffectParams): void {
   const { ctx, width, height, scale } = rc;
   const rng = mulberry32(params.seed);
-  const lines = sourceLines(text);
 
-  const minSize = Math.min(params.minSize, params.maxSize) * scale;
-  const maxSize = Math.max(params.minSize, params.maxSize) * scale;
+  const fontSize = clamp(params.minSize, 12, 200) * scale;
   const blurMax = Math.max(1, params.blur * scale);
   const spread = params.spread / 100;
   const pad = params.padding * scale;
-  const baseSize = clamp((minSize + maxSize) * 0.55, 18 * scale, 160 * scale);
   const letterSpacing = params.tearLetterSpacing * scale;
-  const lineGap = baseSize * (params.tearLineSpacing / 100);
-  const startY = height / 2 - ((lines.length - 1) * lineGap) / 2;
+  const lineGap = fontSize * (params.tearLineSpacing / 100);
   const blurRadius = params.tearBlurRadius * scale;
-  const font = `${rc.fontWeight} ${baseSize}px ${params.fontFamily}`;
+  const font = `${rc.fontWeight} ${fontSize}px ${params.fontFamily}`;
+  const maxWidth = width - pad * 2;
 
-  // 基础清晰文字层
-  const base = offscreen(width, height);
-  const bctx = base.ctx;
-  const textBounds: Array<{ x: number; y: number; w: number; h: number }> = [];
-
-  const measureLine = (line: string): number => {
+  const measure = (s: string): number => {
     ctx.save();
     ctx.font = font;
-    const chars = [...line];
+    const chars = [...s];
     const w = chars.reduce(
       (sum, char, index) =>
         sum + ctx.measureText(char).width + (index < chars.length - 1 ? letterSpacing : 0),
@@ -64,44 +79,36 @@ export function drawTearBlur(rc: RenderContext, text: string, params: EffectPara
     return w;
   };
 
-  const drawSpacedLine = (
-    targetCtx: CanvasRenderingContext2D,
-    line: string,
-    startX: number,
-    y: number,
-    alpha = 1,
-  ): void => {
-    targetCtx.save();
-    targetCtx.globalAlpha = alpha;
-    targetCtx.fillStyle = params.fontColor;
-    targetCtx.font = font;
-    targetCtx.textAlign = 'left';
-    targetCtx.textBaseline = 'middle';
+  // 强制分段 → 每段按宽度自动换行 → 汇总成所有行
+  const lines = paragraphs(text).flatMap((p) => wrapParagraph(measure, p, maxWidth));
+  const startY = height / 2 - ((lines.length - 1) * lineGap) / 2;
+
+  // 基础清晰文字层
+  const base = offscreen(width, height);
+  const bctx = base.ctx;
+  const textBounds: Array<{ x: number; y: number; w: number; h: number }> = [];
+
+  const drawSpacedLine = (line: string, startX: number, y: number, alpha = 0.92): void => {
+    bctx.save();
+    bctx.globalAlpha = alpha;
+    bctx.fillStyle = params.fontColor;
+    bctx.font = font;
+    bctx.textAlign = 'left';
+    bctx.textBaseline = 'middle';
     let x = startX;
     [...line].forEach((char) => {
-      targetCtx.fillText(char, x, y);
-      x += targetCtx.measureText(char).width + letterSpacing;
+      bctx.fillText(char, x, y);
+      x += bctx.measureText(char).width + letterSpacing;
     });
-    targetCtx.restore();
+    bctx.restore();
   };
 
   lines.forEach((line, lineIndex) => {
     const y = startY + lineIndex * lineGap;
-    const measured = measureLine(line);
-    const maxWidth = width - pad * 2;
-    const lineScale = measured > maxWidth ? maxWidth / measured : 1;
-    const x0 = width / 2 - (measured * lineScale) / 2;
-    bctx.save();
-    bctx.translate(x0, y);
-    bctx.scale(lineScale, lineScale);
-    drawSpacedLine(bctx, line, 0, 0, 0.92);
-    bctx.restore();
-    textBounds.push({
-      x: x0,
-      y: y - baseSize * lineScale * 0.6,
-      w: measured * lineScale,
-      h: baseSize * lineScale * 1.2,
-    });
+    const measured = measure(line);
+    const x0 = width / 2 - measured / 2;
+    drawSpacedLine(line, x0, y);
+    textBounds.push({ x: x0, y: y - fontSize * 0.6, w: measured, h: fontSize * 1.2 });
   });
 
   // 文字外接矩形并集，模糊圆只落在文字范围内
