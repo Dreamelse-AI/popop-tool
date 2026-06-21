@@ -34,11 +34,11 @@ const SLIDERS_BY_MODE: Record<EffectMode, SliderDef[]> = {
   ],
   tearBlur: [
     { key: 'minSize', label: '字号', min: 20, max: 120, unit: 'px' },
-    { key: 'blur', label: '模糊强度', min: 1, max: 30, unit: 'px' },
-    { key: 'tearBlurRadius', label: '模糊圆大小', min: 30, max: 240, unit: 'px' },
+    { key: 'blur', label: '模糊强度', min: 4, max: 8, unit: 'px' },
+    { key: 'tearBlurRadius', label: '模糊圆大小', min: 80, max: 200, unit: 'px' },
     { key: 'spread', label: '分散程度', min: 0, max: 100, unit: '%' },
     { key: 'tearLetterSpacing', label: '字间距', min: 0, max: 40, unit: 'px' },
-    { key: 'tearLineSpacing', label: '行间距', min: 80, max: 280, unit: '%' },
+    { key: 'tearLineSpacing', label: '行间距', min: 120, max: 280, unit: '%' },
   ],
   imageFill: [
     { key: 'minSize', label: '字号', min: 12, max: 48, unit: 'px' },

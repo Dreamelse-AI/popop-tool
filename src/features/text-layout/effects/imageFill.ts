@@ -59,33 +59,6 @@ function resolveMask(params: EffectParams, image: HTMLImageElement | null): Shap
   return buildShapeMask(params.fillShape);
 }
 
-/** 取居中、连续的填充槽位，避免文字稀疏散落。 */
-function centeredGroups<T>(groups: T[][], count: number): T[] {
-  const active = groups.filter((g) => g.length);
-  const total = active.reduce((sum, g) => sum + g.length, 0);
-  if (!total || !count) return [];
-  if (count >= total) return active.flat();
-
-  let start = Math.floor(active.length / 2);
-  let end = start;
-  let capacity = active[start].length;
-  while (capacity < count && (start > 0 || end < active.length - 1)) {
-    const leftCap = start > 0 ? active[start - 1].length : -1;
-    const rightCap = end < active.length - 1 ? active[end + 1].length : -1;
-    if (rightCap >= leftCap) {
-      end++;
-      capacity += active[end].length;
-    } else {
-      start--;
-      capacity += active[start].length;
-    }
-  }
-  return active
-    .slice(start, end + 1)
-    .flat()
-    .slice(0, count);
-}
-
 /**
  * 图片填充字：在形状轮廓内部铺满文字。
  * 形状来自内置（爱心/星星/圆形/菱形）或上传图片。
@@ -160,9 +133,9 @@ function fillSlots(
   params: EffectParams,
   size: number,
 ): void {
-  const total = groups.reduce((s, g) => s + g.length, 0);
-  const want = chars.length || total;
-  centeredGroups(groups, Math.min(want, total)).forEach((slot, index) => {
+  // 填满形状内所有槽位，文字不足时循环重复
+  const slots = groups.flat();
+  slots.forEach((slot, index) => {
     const char = chars.length ? chars[index % chars.length] : '字';
     drawChar(rc, char, slot.x, slot.y, size, params.fontFamily, params.fontColor, 0, 1, 0);
   });
