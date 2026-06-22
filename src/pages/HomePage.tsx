@@ -17,6 +17,14 @@ const TOOLS: ToolEntry[] = [
     path: '/tools/text-layout',
     status: 'available',
   },
+  {
+    id: 'background',
+    name: '氛围背景图生成器',
+    description:
+      '组合 Motion/Medium/Light/Color/Mood 五层，生成统一品牌语言的抽象氛围背景图。',
+    path: '/tools/background',
+    status: 'available',
+  },
 ];
 
 export function HomePage() {

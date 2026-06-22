@@ -1,17 +1,10 @@
 import type { EffectParams } from '@/types/layout';
-import {
-  clamp,
-  drawChar,
-  flatChars,
-  mulberry32,
-  randomBetween,
-  textLines,
-  type RenderContext,
-} from './shared';
+import { clamp, drawChar, flatChars, mulberry32, randomBetween, type RenderContext } from './shared';
 
 /**
- * 横排弹幕模式：与雨落同构，改为横向行排列，围绕竖轴中心散开。
- * 字号/模糊随机，底部叠暗渐变。
+ * 横排弹幕模式（顺序可读）：文字按原文顺序横排。
+ * 行内从左到右、行与行从上到下推进，可顺着读出内容。
+ * 保留轻微字号/模糊浮动营造弹幕层次，但不打乱阅读顺序。
  */
 export function drawBarrage(rc: RenderContext, text: string, params: EffectParams): void {
   const { ctx, width, height, scale } = rc;
@@ -19,65 +12,51 @@ export function drawBarrage(rc: RenderContext, text: string, params: EffectParam
   const chars = flatChars(text);
   const count = Math.max(1, chars.length);
 
-  const minSize = Math.min(params.minSize, params.maxSize) * scale;
-  const maxSize = Math.max(params.minSize, params.maxSize) * scale;
+  const baseSize = clamp(params.minSize, 12, 160) * scale;
   const blurMax = params.blur * scale;
   const pad = params.padding * scale;
-  const centerX = width * (params.axisCenter / 100);
 
-  const visibleLeft = pad;
-  const visibleRight = width - pad;
-  const visibleTop = pad;
-  const visibleBottom = height - pad;
-  const availableWidth = Math.max(80, visibleRight - visibleLeft);
-  const availableHeight = Math.max(80, visibleBottom - visibleTop);
+  const availableWidth = Math.max(80, width - pad * 2);
+  const charGap = baseSize * 1.12;
+  // 每行能放多少字（从左到右）
+  const perRow = Math.max(1, Math.floor(availableWidth / charGap));
+  const rowCount = Math.ceil(count / perRow);
+  const rowGap = baseSize * 1.5;
+  // 整体竖向居中
+  const totalHeight = (rowCount - 1) * rowGap;
+  const startY = clamp(height / 2 - totalHeight / 2, pad + baseSize * 0.5, height - pad - baseSize * 0.5);
 
-  const lines = textLines(text);
-  const flat = lines.flat();
   let drawn = 0;
-
-  const rowCount = Math.max(4, Math.ceil(count / 20), Math.floor(Math.sqrt(count) * 1.15));
-  const rowGap = availableHeight / rowCount;
-
   for (let r = 0; r < rowCount && drawn < count; r++) {
-    const size = randomBetween(rng, minSize, maxSize);
-    const blur = Math.pow(rng(), 1.2) * blurMax;
-    const alpha = clamp(1 - blur / Math.max(1, blurMax + 3), 0.12, 1);
-    const y = visibleTop + rowGap * (r + 0.5) + randomBetween(rng, -rowGap * 0.14, rowGap * 0.14);
-    const charGap = size * randomBetween(rng, 0.9, 1.2);
-    const desiredLetters = Math.max(4, Math.floor(randomBetween(rng, 6, 22)));
-    const maxVisibleLetters = Math.max(1, Math.floor((availableWidth - size) / charGap) + 1);
-    const rowLetters = Math.min(desiredLetters, maxVisibleLetters, count - drawn);
+    const y = startY + r * rowGap;
+    const rowLetters = Math.min(perRow, count - drawn);
     const rowWidth = (rowLetters - 1) * charGap;
-    const centerJitter = randomBetween(rng, -1, 1) * availableWidth * 0.08;
-    const centeredStart = centerX - rowWidth / 2 + centerJitter;
-    const xStart = clamp(centeredStart, visibleLeft, Math.max(visibleLeft, visibleRight - rowWidth));
-    const slightAngle = randomBetween(rng, -0.035, 0.035);
-    const depthScale = randomBetween(rng, 0.78, 1.08);
+    const xStart = width / 2 - rowWidth / 2;
 
     for (let i = 0; i < rowLetters && drawn < count; i++) {
       const x = xStart + i * charGap;
-      const fade = i < 2 ? 0.68 + i * 0.16 : 1;
-      const char = flat.length ? flat[drawn % flat.length] : '字';
+      const depthBlur = Math.pow(rng(), 2) * blurMax * 0.5;
+      const alpha = clamp(1 - depthBlur / Math.max(1, blurMax + 6), 0.55, 1);
+      const sizeJitter = randomBetween(rng, 0.94, 1.06);
       drawChar(
         rc,
-        char,
+        chars[drawn],
         x,
         y,
-        size * depthScale,
+        baseSize * sizeJitter,
         params.fontFamily,
         params.fontColor,
-        slightAngle,
-        alpha * fade,
-        blur,
+        0,
+        alpha,
+        depthBlur,
       );
       drawn++;
     }
   }
 
-  const gradient = ctx.createLinearGradient(0, height * 0.58, 0, height);
+  const gradient = ctx.createLinearGradient(0, height * 0.62, 0, height);
   gradient.addColorStop(0, 'rgba(0,0,0,0)');
-  gradient.addColorStop(1, 'rgba(0,0,0,0.3)');
+  gradient.addColorStop(1, 'rgba(0,0,0,0.26)');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, width, height);
 }

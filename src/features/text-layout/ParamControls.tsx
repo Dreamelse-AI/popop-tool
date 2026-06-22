@@ -19,17 +19,13 @@ interface SliderDef {
 /** 各模式显示哪些滑杆。 */
 const SLIDERS_BY_MODE: Record<EffectMode, SliderDef[]> = {
   rain: [
-    { key: 'minSize', label: '最小字号', min: 12, max: 80, unit: 'px' },
-    { key: 'maxSize', label: '最大字号', min: 20, max: 120, unit: 'px' },
-    { key: 'blur', label: '随机模糊', min: 0, max: 20, unit: 'px' },
-    { key: 'axisCenter', label: '横轴中心', min: 0, max: 100, unit: '%' },
+    { key: 'minSize', label: '字号', min: 18, max: 80, unit: 'px' },
+    { key: 'blur', label: '层次模糊', min: 0, max: 12, unit: 'px' },
     { key: 'padding', label: '边距', min: 0, max: 160, unit: 'px' },
   ],
   barrage: [
-    { key: 'minSize', label: '最小字号', min: 12, max: 80, unit: 'px' },
-    { key: 'maxSize', label: '最大字号', min: 20, max: 120, unit: 'px' },
-    { key: 'blur', label: '随机模糊', min: 0, max: 20, unit: 'px' },
-    { key: 'axisCenter', label: '竖轴中心', min: 0, max: 100, unit: '%' },
+    { key: 'minSize', label: '字号', min: 18, max: 80, unit: 'px' },
+    { key: 'blur', label: '层次模糊', min: 0, max: 12, unit: 'px' },
     { key: 'padding', label: '边距', min: 0, max: 160, unit: 'px' },
   ],
   tearBlur: [
@@ -41,7 +37,6 @@ const SLIDERS_BY_MODE: Record<EffectMode, SliderDef[]> = {
     { key: 'tearLineSpacing', label: '行间距', min: 120, max: 280, unit: '%' },
   ],
   imageFill: [
-    { key: 'minSize', label: '字号', min: 12, max: 48, unit: 'px' },
     { key: 'padding', label: '边距', min: 0, max: 160, unit: 'px' },
   ],
 };

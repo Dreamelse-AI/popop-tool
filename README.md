@@ -6,6 +6,63 @@
 
 React 19 + TypeScript + Vite 7 + Tailwind v4 + Zustand + react-router-dom 7。
 
+## 工具二：氛围背景图生成器
+
+Atmospheric Motion Background System v1.0。组合五层维度生成统一品牌语言的抽象氛围背景：
+
+```
+Background = Motion + Medium + Light + Color + Mood
+```
+
+- **Motion 运动**：Breeze / Flow / Wave / Orbit / Burst
+- **Medium 介质**：Air / Cloud / Silk / Glass / Light
+- **Light 光感**：Soft Bloom / Daylight / Pearl / Neon / Spotlight
+- **Color 色彩**：Calm Mint / Dream Lavender / Ocean Blue / Sunset / Midnight
+- **Mood 情绪**：Relaxed / Dreamy / Premium / Energetic / Nostalgic
+
+每层选项携带一段英文 prompt 片段，叠加固定「品牌视觉底座」拼成最终 prompt，调用图像生成 API 出图。内置「放松慵懒 / 梦幻浪漫 / 科技高级 / Apple Intelligence 风格」推荐组合一键套用。
+
+链路：
+
+```
+选 5 层 → [拼装] buildPrompt() = 品牌底座 + 各层片段 + 自定义词
+  → BackgroundRecipe（selection + ratio + resolution）
+  → [同源代理 /img-api] generateBackground() 转发 apimart
+  → 返回图片 url / base64 → 预览 + 下载
+```
+
+### 密钥安全（重要）
+
+图像生成 API key **绝不进前端 bundle**。前端只请求同源代理路径 `/img-api`，
+由 vite dev server（开发）按 `proxyReq` 注入 `Authorization` 头转发到 apimart。
+
+本地运行前，复制 `.env.example` 为 `.env` 并填入密钥：
+
+```bash
+cp .env.example .env
+# 编辑 .env，填 IMAGE_API_KEY
+```
+
+`.env` 已在 `.gitignore` 中，不会被提交。生产环境需自行用反向代理（Nginx/网关）
+对 `/img-api` 注入同样的鉴权头，不要把 key 暴露到浏览器。
+
+### 目录
+
+```
+src/
+├── types/background.ts              契约：五层 id / Selection / Recipe
+├── data/backgroundOptions.ts        品牌底座 + 五层选项 + 推荐组合
+├── services/
+│   ├── promptBuilder.ts             拼装最终 prompt
+│   └── imageClient.ts               调用图像生成 API（走 /img-api 代理）
+├── features/background/
+│   ├── store.ts                     Zustand 状态（含请求取消防竞态）
+│   ├── LayerPicker.tsx              单层选项卡片
+│   ├── PresetPicker.tsx            推荐组合
+│   └── downloadImage.ts            跨域图片下载
+└── pages/BackgroundPage.tsx        页面组装
+```
+
 ## 工具一：文字自动化排版
 
 输入文字（≤500 字），选特效并微调参数，产出 4:3（1080×810）文字排版图片。

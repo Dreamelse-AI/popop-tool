@@ -60,8 +60,9 @@ function resolveMask(params: EffectParams, image: HTMLImageElement | null): Shap
 }
 
 /**
- * 图片填充字：在形状轮廓内部铺满文字。
- * 形状来自内置（爱心/星星/圆形/菱形）或上传图片。
+ * 图片填充字（顺序可读 + 自动放大字号）：
+ * 文字按原文顺序在形状内部铺一遍（不重复），自动选取「能容纳全部文字的最大字号」，
+ * 让内容刚好填满形状且单字尽量大、清晰可读。
  */
 export function drawImageFill(
   rc: RenderContext,
@@ -73,14 +74,15 @@ export function drawImageFill(
   const mask = resolveMask(params, image);
 
   if (!mask) {
-    // fillShape='image' 但还没上传：提示占位
     drawPlaceholder(rc);
     return;
   }
 
-  // 把形状按 bounds 居中等比放进画布可用区，保持形状原始长宽比
-  const size = params.minSize * scale;
+  const chars = flatChars(text);
+  const count = Math.max(1, chars.length);
   const pad = params.padding * scale;
+
+  // 形状按 bounds 等比放进可用区，保持原始长宽比
   const areaW = width - pad * 2;
   const areaH = height - pad * 2;
   const shapeW = (mask.bounds.right - mask.bounds.left) * mask.width;
@@ -91,54 +93,57 @@ export function drawImageFill(
   const offsetX = (width - drawW) / 2;
   const offsetY = (height - drawH) / 2;
 
-  // 画布坐标 → mask 归一化坐标
   const toMaskNorm = (x: number, y: number): [number, number] => [
     mask.bounds.left + ((x - offsetX) / drawW) * (mask.bounds.right - mask.bounds.left),
     mask.bounds.top + ((y - offsetY) / drawH) * (mask.bounds.bottom - mask.bounds.top),
   ];
 
-  const stepX = size * 0.95;
-  const stepY = size * 1.24;
-  const chars = flatChars(text);
-
-  if (params.fillDirection === 'horizontal') {
-    const rows: Array<Array<{ x: number; y: number }>> = [];
-    for (let y = offsetY + size * 0.55; y <= offsetY + drawH - size * 0.35; y += stepY) {
-      const row: Array<{ x: number; y: number }> = [];
-      for (let x = offsetX + size * 0.45; x <= offsetX + drawW - size * 0.35; x += stepX) {
-        const [nx, ny] = toMaskNorm(x, y);
-        if (maskContains(mask, nx, ny)) row.push({ x, y });
-      }
-      if (row.length) rows.push(row);
-    }
-    fillSlots(rc, rows, chars, params, size);
-  } else {
-    const columns: Array<Array<{ x: number; y: number }>> = [];
-    for (let x = offsetX + size * 0.5; x <= offsetX + drawW - size * 0.35; x += stepX * 1.15) {
-      const column: Array<{ x: number; y: number }> = [];
+  // 给定字号，按阅读顺序收集形状内的槽位
+  const collectSlots = (size: number): Array<{ x: number; y: number }> => {
+    const stepX = size * 0.95;
+    const stepY = size * 1.24;
+    const slots: Array<{ x: number; y: number }> = [];
+    if (params.fillDirection === 'horizontal') {
       for (let y = offsetY + size * 0.55; y <= offsetY + drawH - size * 0.35; y += stepY) {
-        const [nx, ny] = toMaskNorm(x, y);
-        if (maskContains(mask, nx, ny)) column.push({ x, y });
+        for (let x = offsetX + size * 0.45; x <= offsetX + drawW - size * 0.35; x += stepX) {
+          const [nx, ny] = toMaskNorm(x, y);
+          if (maskContains(mask, nx, ny)) slots.push({ x, y });
+        }
       }
-      if (column.length) columns.push(column);
+    } else {
+      for (let x = offsetX + size * 0.5; x <= offsetX + drawW - size * 0.35; x += stepX * 1.15) {
+        for (let y = offsetY + size * 0.55; y <= offsetY + drawH - size * 0.35; y += stepY) {
+          const [nx, ny] = toMaskNorm(x, y);
+          if (maskContains(mask, nx, ny)) slots.push({ x, y });
+        }
+      }
     }
-    fillSlots(rc, columns, chars, params, size);
-  }
-}
+    return slots;
+  };
 
-function fillSlots(
-  rc: RenderContext,
-  groups: Array<Array<{ x: number; y: number }>>,
-  chars: string[],
-  params: EffectParams,
-  size: number,
-): void {
-  // 填满形状内所有槽位，文字不足时循环重复
-  const slots = groups.flat();
-  slots.forEach((slot, index) => {
-    const char = chars.length ? chars[index % chars.length] : '字';
-    drawChar(rc, char, slot.x, slot.y, size, params.fontFamily, params.fontColor, 0, 1, 0);
-  });
+  // 二分找「能容纳全部文字的最大字号」：字号越大槽位越少
+  const minPx = 12 * scale;
+  const maxPx = 160 * scale;
+  let lo = minPx;
+  let hi = maxPx;
+  let bestSize = minPx;
+  for (let iter = 0; iter < 18 && hi - lo > 0.5; iter++) {
+    const mid = (lo + hi) / 2;
+    if (collectSlots(mid).length >= count) {
+      bestSize = mid; // 还能放下全部 → 尝试更大
+      lo = mid;
+    } else {
+      hi = mid; // 放不下 → 缩小
+    }
+  }
+
+  const size = bestSize;
+  const slots = collectSlots(size);
+  // 按原文顺序填一遍：内容只出现一次
+  const used = Math.min(chars.length, slots.length);
+  for (let i = 0; i < used; i++) {
+    drawChar(rc, chars[i], slots[i].x, slots[i].y, size, params.fontFamily, params.fontColor, 0, 1, 0);
+  }
 }
 
 /** fillShape='image' 但未上传图片时的占位提示。 */
