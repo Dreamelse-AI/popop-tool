@@ -21,7 +21,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      port: 5180,
+      port: 5181,
+      strictPort: true,
       proxy: {
         // 本地临时后端（结构抽取 AI 代理、mock）
         '/local-api': {
