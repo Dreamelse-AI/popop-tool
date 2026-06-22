@@ -6,6 +6,7 @@ import { LayoutCanvas, type LayoutCanvasHandle } from '@/features/text-layout/La
 import { ModePicker } from '@/features/text-layout/ModePicker';
 import { ParamControls } from '@/features/text-layout/ParamControls';
 import { BackgroundPicker } from '@/features/text-layout/BackgroundPicker';
+import { PromptPanel } from '@/features/text-layout/PromptPanel';
 import { downloadDataUrl } from '@/features/text-layout/exportImage';
 
 const PREVIEW_WIDTH = 420;
@@ -179,6 +180,17 @@ export function TextLayoutPage() {
           </button>
         </section>
       </main>
+
+      {/* 生产链路面板：提示词片段 + 输出示例 */}
+      <section className="mx-auto max-w-6xl px-8 pb-12">
+        <div className="rounded-xl border border-neutral-200 bg-white p-6">
+          <h2 className="mb-1 text-base font-bold text-neutral-900">生产链路对接</h2>
+          <p className="mb-4 text-sm text-neutral-500">
+            这套排版/配色目录会拼进模型的内容生成提示词；模型在生成文案时一并选好风格，按下方 JSON 结构输出。
+          </p>
+          <PromptPanel mode={mode} params={params} background={background} text={inputText} />
+        </div>
+      </section>
     </div>
   );
 }
