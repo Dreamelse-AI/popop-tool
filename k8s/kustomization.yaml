@@ -1,0 +1,27 @@
+# ============================================================
+# 用 kustomize 聚合资源：kubectl apply -k k8s/
+#
+# secret.example.yaml 不纳入（避免误 apply 占位密钥）。
+# 真实 Secret 用命令行单独创建（见 README）。
+# ingress.yaml 不纳入（ALB 属基础设施，集群侧手动管理）。
+# CI 会用 kustomize 覆盖镜像 tag。
+# ============================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: fast-projects
+
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - hpa.yaml
+
+images:
+  - name: repository-bebelike-i18n-ap-southeast-1.cr.bytepluses.com/bebelike-i18n-prod/popop-tool
+    newTag: latest
+
+labels:
+  - pairs:
+      managed-by: kustomize
+    includeSelectors: false

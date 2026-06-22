@@ -44,26 +44,28 @@ export function flatChars(text: string): string[] {
   return textLines(text).flat();
 }
 
-/** 渲染上下文：所有 effect 共享的画布与参数封装。 */
+/** 渲染上下文：所有 effect 共享的画布与风格封装。 */
 export interface RenderContext {
   ctx: CanvasRenderingContext2D;
   width: number;
   height: number;
+  /** 字体族（CSS font-family） */
+  fontFamily: string;
+  /** 文字颜色 */
+  fontColor: string;
   /** 字体粗细（CSS font-weight） */
   fontWeight: string;
   /** 整体缩放：预览为 1，导出高清时 >1，effect 内尺寸需乘它 */
   scale: number;
 }
 
-/** 在画布上绘制单个字符（带旋转、透明度、模糊）。 */
+/** 在画布上绘制单个字符（带旋转、透明度、模糊）。颜色/字体取自 RenderContext。 */
 export function drawChar(
   rc: RenderContext,
   char: string,
   x: number,
   y: number,
   size: number,
-  fontFamily: string,
-  fontColor: string,
   angle = 0,
   alpha = 1,
   blur = 0,
@@ -74,8 +76,8 @@ export function drawChar(
   ctx.rotate(angle);
   ctx.globalAlpha = alpha;
   ctx.filter = blur > 0 ? `blur(${blur.toFixed(2)}px)` : 'none';
-  ctx.fillStyle = fontColor;
-  ctx.font = `${rc.fontWeight} ${Math.max(4, size)}px ${fontFamily}`;
+  ctx.fillStyle = rc.fontColor;
+  ctx.font = `${rc.fontWeight} ${Math.max(4, size)}px ${rc.fontFamily}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(char, 0, 0);

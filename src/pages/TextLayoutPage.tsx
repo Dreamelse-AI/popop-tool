@@ -5,6 +5,7 @@ import { useTextLayoutStore } from '@/features/text-layout/store';
 import { LayoutCanvas, type LayoutCanvasHandle } from '@/features/text-layout/LayoutCanvas';
 import { ModePicker } from '@/features/text-layout/ModePicker';
 import { ParamControls } from '@/features/text-layout/ParamControls';
+import { BackgroundPicker } from '@/features/text-layout/BackgroundPicker';
 import { downloadDataUrl } from '@/features/text-layout/exportImage';
 
 const PREVIEW_WIDTH = 420;
@@ -16,14 +17,18 @@ export function TextLayoutPage() {
     inputText,
     mode,
     params,
-    image,
-    imageName,
+    style,
+    background,
+    shapeImage,
+    shapeImageName,
+    bgImage,
     status,
     errorMessage,
     setInputText,
     setMode,
     setParam,
-    setImage,
+    setBackground,
+    setShapeImage,
     reseed,
     runExtract,
   } = useTextLayoutStore();
@@ -35,7 +40,7 @@ export function TextLayoutPage() {
   const handleImageUpload = (file: File | undefined) => {
     if (!file) return;
     const img = new Image();
-    img.onload = () => setImage(img, file.name);
+    img.onload = () => setShapeImage(img, file.name);
     img.onerror = () => {
       console.error('image.load.failed', file.name);
       alert('图片加载失败，请换一张');
@@ -109,6 +114,11 @@ export function TextLayoutPage() {
             <ModePicker selected={mode} onSelect={setMode} />
           </div>
 
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-neutral-700">背景</label>
+            <BackgroundPicker background={background} onSelect={setBackground} />
+          </div>
+
           {mode === 'imageFill' && params.fillShape === 'image' && (
             <div>
               <label className="mb-2 block text-sm font-semibold text-neutral-700">
@@ -121,7 +131,9 @@ export function TextLayoutPage() {
                 className="block w-full text-sm text-neutral-600 file:mr-3 file:rounded file:border-0 file:bg-neutral-900 file:px-4 file:py-2 file:text-white"
               />
               <p className="mt-1 text-xs text-neutral-400">
-                {imageName ? `已上传：${imageName}` : '建议黑白剪影或对比强烈的形状，文字会填进暗部。'}
+                {shapeImageName
+                  ? `已上传：${shapeImageName}`
+                  : '建议黑白剪影或对比强烈的形状，文字会填进暗部。'}
               </p>
             </div>
           )}
@@ -142,7 +154,9 @@ export function TextLayoutPage() {
                 mode={mode}
                 text={inputText}
                 params={params}
-                image={image}
+                style={style}
+                shapeImage={shapeImage}
+                bgImage={bgImage}
                 displayWidth={PREVIEW_WIDTH}
               />
             ) : (

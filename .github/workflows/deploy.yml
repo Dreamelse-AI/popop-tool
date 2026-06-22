@@ -1,0 +1,116 @@
+# ============================================================
+# CI/CD：质量检查 → 构建并推送镜像 → 部署到 K8s
+#
+# 需在仓库 Settings → Secrets and variables → Actions 配置：
+#  【Secrets】
+#   - KUBE_CONFIG          : base64 编码的 kubeconfig
+#   - BYTEPLUS_CR_USERNAME : 推送镜像到 BytePlus CR 的账号
+#   - BYTEPLUS_CR_PASSWORD : 上述账号对应的密码/访问令牌
+#
+# 注意：APIMART_API_KEY 是【运行时】K8s Secret(popop-tool-secrets)，
+#   由集群侧管理，不在此处、也不进镜像与前端 bundle。
+# ============================================================
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: repository-bebelike-i18n-ap-southeast-1.cr.bytepluses.com
+  IMAGE_NAME: bebelike-i18n-prod/popop-tool
+
+concurrency:
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: 质量检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm run lint
+        continue-on-error: true
+      - name: 构建（前端 + 服务端）
+        run: pnpm run build:all
+
+  build:
+    name: 构建并推送镜像
+    runs-on: ubuntu-latest
+    needs: quality
+    permissions:
+      contents: read
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: 登录容器仓库(BytePlus CR)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.BYTEPLUS_CR_USERNAME }}
+          password: ${{ secrets.BYTEPLUS_CR_PASSWORD }}
+      - name: 生成镜像 tag/label
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/setup-buildx-action@v3
+      - name: 构建并推送
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: 部署到 K8s
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 kustomize
+        uses: imranismail/setup-kustomize@v2
+      - name: 配置 kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+      - name: 覆盖镜像 tag 为本次提交
+        working-directory: k8s
+        run: |
+          IMAGE="${REGISTRY}/${IMAGE_NAME}"
+          kustomize edit set image "${IMAGE}=${IMAGE}:sha-${GITHUB_SHA}"
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+      - name: 应用清单并等待滚动完成
+        run: |
+          kubectl apply -k k8s/
+          kubectl -n fast-projects rollout status deploy/popop-tool --timeout=180s
+      - name: 部署后健康自检
+        run: |
+          kubectl -n fast-projects get pods -l app=popop-tool
+          kubectl -n fast-projects run curl-check-popop --rm -i --restart=Never \
+            --image=curlimages/curl:8.10.1 -- \
+            -sf http://popop-tool.fast-projects.svc.cluster.local:3000/health

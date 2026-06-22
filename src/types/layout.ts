@@ -34,16 +34,13 @@ export type FillShape =
   | 'image'; // 上传图片
 
 /**
- * 特效渲染参数。所有可调旋钮收在这里，渲染算法只读这份参数。
+ * 特效渲染的「数值参数」。所有可在区间内随机的旋钮收在这里，渲染算法只读这份参数。
  * 数值基于 1080*810 画布；导出高清时由渲染器统一缩放。
+ *
+ * 注意：字体/配色不在此处——它们走 RenderStyle（来自配色库或图片库），
+ * 数值参数与视觉风格解耦。
  */
 export interface EffectParams {
-  /** 字体族（CSS font-family） */
-  fontFamily: string;
-  /** 字体颜色 */
-  fontColor: string;
-  /** 背景颜色 */
-  bgColor: string;
   /** 最小字号(px) */
   minSize: number;
   /** 最大字号(px) */
@@ -55,8 +52,8 @@ export interface EffectParams {
   /** 随机种子：相同种子 + 相同输入 = 相同结果 */
   seed: number;
 
-  /** rain/barrage：主轴中心位置（百分比 0-100）。rain 为横轴 Y，barrage 为竖轴 X */
-  axisCenter: number;
+  /** rain/barrage：错落程度；tearBlur：模糊圆数量（百分比 0-100） */
+  spread: number;
 
   /** tearBlur：字间距(px) */
   tearLetterSpacing: number;
@@ -64,8 +61,6 @@ export interface EffectParams {
   tearLineSpacing: number;
   /** tearBlur：模糊圆半径(px) */
   tearBlurRadius: number;
-  /** tearBlur：分散程度（控制模糊圆数量，百分比 0-100） */
-  spread: number;
 
   /** imageFill：填充方向 */
   fillDirection: 'horizontal' | 'vertical';
@@ -76,14 +71,33 @@ export interface EffectParams {
 }
 
 /**
- * 结构抽取结果：决定用哪种特效 + 初始参数。
- * 这是后端要返回的稳定契约。
+ * 渲染视觉风格：字体 + 配色 + 可选背景图。
+ * 由背景选择（配色库/图片库）解析而来，渲染算法据此上色。
+ */
+export interface RenderStyle {
+  /** 字体族（CSS font-family） */
+  fontFamily: string;
+  /** 文字颜色 */
+  fontColor: string;
+  /** 背景色（纯色或 CSS 渐变）；有 bgImageUrl 时作为图片底色 */
+  bgColor: string;
+  /** 背景图地址（可选，来自图片库） */
+  bgImageUrl?: string;
+  /** 背景图上的遮罩色（保证文字可读，可选） */
+  overlay?: string;
+}
+
+/**
+ * 结构抽取结果：渲染一张图所需的完整配方。
+ * 这是渲染层消费的稳定契约（已把模型的离散选择解析为具体 style + 随机出的 params）。
  */
 export interface LayoutRecipe {
-  /** 推荐特效模式 */
+  /** 排版效果模式 */
   mode: EffectMode;
-  /** 推荐特效参数（用户可在 UI 覆盖） */
+  /** 区间随机出的数值参数 */
   params: EffectParams;
+  /** 解析后的渲染风格（字体/配色/背景图） */
+  style: RenderStyle;
   /** 抽取来源：mock 阶段为 'mock'，后端接上后为 'model' */
   source: 'mock' | 'model';
 }

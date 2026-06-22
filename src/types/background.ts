@@ -46,10 +46,10 @@ export interface BackgroundSelection {
   mood: MoodId;
 }
 
-/** 输出图片比例（apimart size 字段直接透传）。 */
-export type AspectRatio = '9:16' | '3:4' | '1:1' | '4:3' | '16:9';
+/** 输出图片比例（apimart size 字段，取常用子集）。 */
+export type AspectRatio = '9:16' | '3:4' | '1:1' | '4:3' | '16:9' | '2:3' | '3:2';
 
-/** 输出分辨率档位（apimart resolution 字段）。 */
+/** 输出分辨率档位（apimart resolution 字段，小写）。 */
 export type Resolution = '1k' | '2k' | '4k';
 
 /** 生成参数：选择 + 输出规格 + 可选自定义补充词。 */
@@ -71,19 +71,21 @@ export interface BackgroundPreset {
   selection: BackgroundSelection;
 }
 
-/** 图像生成请求体（发给同源代理，代理再转发给 apimart）。 */
+/** 图像生成请求体（发给同源代理 /apimart，代理再转发给 apimart）。 */
 export interface GenerateImageRequest {
+  /** 固定 gpt-image-2 */
+  model: string;
   prompt: string;
-  size: AspectRatio;
-  resolution: Resolution;
   /** 生成张数，固定 1 */
   n: number;
+  /** 比例，如 9:16 */
+  size: AspectRatio;
+  /** 分辨率档位 1k/2k/4k */
+  resolution: Resolution;
 }
 
-/** 图像生成响应里的单张结果。 */
+/** 图像生成结果。apimart 任务完成后从 result.images[0].url[0] 取直链。 */
 export interface GeneratedImage {
-  /** 直链 URL（apimart 返回 url 时） */
-  url?: string;
-  /** base64（apimart 返回 b64_json 时） */
-  b64Json?: string;
+  /** 直链 URL */
+  url: string;
 }

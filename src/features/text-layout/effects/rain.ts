@@ -58,7 +58,7 @@ export function drawRain(rc: RenderContext, text: string, params: EffectParams):
 
     col.chars.forEach((char, j) => {
       const y = yStart + j * col.charGap;
-      drawChar(rc, char, colX, y, col.size, params.fontFamily, params.fontColor, 0, alpha, depthBlur);
+      drawChar(rc, char, colX, y, col.size, 0, alpha, depthBlur);
     });
   });
 

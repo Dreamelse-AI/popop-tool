@@ -142,7 +142,7 @@ export function drawImageFill(
   // 按原文顺序填一遍：内容只出现一次
   const used = Math.min(chars.length, slots.length);
   for (let i = 0; i < used; i++) {
-    drawChar(rc, chars[i], slots[i].x, slots[i].y, size, params.fontFamily, params.fontColor, 0, 1, 0);
+    drawChar(rc, chars[i], slots[i].x, slots[i].y, size, 0, 1, 0);
   }
 }
 

@@ -57,7 +57,7 @@ export function drawBarrage(rc: RenderContext, text: string, params: EffectParam
 
     row.chars.forEach((char, j) => {
       const x = xStart + j * row.charGap;
-      drawChar(rc, char, x, rowY, row.size, params.fontFamily, params.fontColor, 0, alpha, depthBlur);
+      drawChar(rc, char, x, rowY, row.size, 0, alpha, depthBlur);
     });
   });
 

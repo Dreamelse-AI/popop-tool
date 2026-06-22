@@ -15,7 +15,7 @@ import { PresetPicker } from '@/features/background/PresetPicker';
 import { downloadImage } from '@/features/background/downloadImage';
 import { resolveImageSrc } from '@/services/imageClient';
 
-const RATIOS: AspectRatio[] = ['9:16', '3:4', '1:1', '4:3', '16:9'];
+const RATIOS: AspectRatio[] = ['9:16', '3:4', '2:3', '1:1', '3:2', '4:3', '16:9'];
 const RESOLUTIONS: Resolution[] = ['1k', '2k', '4k'];
 
 export function BackgroundPage() {

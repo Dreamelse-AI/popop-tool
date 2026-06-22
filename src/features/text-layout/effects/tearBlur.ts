@@ -63,7 +63,7 @@ export function drawTearBlur(rc: RenderContext, text: string, params: EffectPara
   const letterSpacing = params.tearLetterSpacing * scale;
   const lineGap = fontSize * (params.tearLineSpacing / 100);
   const blurRadius = params.tearBlurRadius * scale;
-  const font = `${rc.fontWeight} ${fontSize}px ${params.fontFamily}`;
+  const font = `${rc.fontWeight} ${fontSize}px ${rc.fontFamily}`;
   const maxWidth = width - pad * 2;
 
   const measure = (s: string): number => {
@@ -91,7 +91,7 @@ export function drawTearBlur(rc: RenderContext, text: string, params: EffectPara
   const drawSpacedLine = (line: string, startX: number, y: number, alpha = 0.92): void => {
     bctx.save();
     bctx.globalAlpha = alpha;
-    bctx.fillStyle = params.fontColor;
+    bctx.fillStyle = rc.fontColor;
     bctx.font = font;
     bctx.textAlign = 'left';
     bctx.textBaseline = 'middle';

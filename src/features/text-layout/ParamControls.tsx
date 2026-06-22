@@ -16,7 +16,10 @@ interface SliderDef {
   unit?: string;
 }
 
-/** 各模式显示哪些滑杆。 */
+/**
+ * 各模式显示哪些滑杆（仅调试用）。
+ * 生产链路不用这些滑杆，参数由 randomizeParams 在效果库区间内随机。
+ */
 const SLIDERS_BY_MODE: Record<EffectMode, SliderDef[]> = {
   rain: [
     { key: 'minSize', label: '最小字号', min: 16, max: 70, unit: 'px' },
@@ -40,9 +43,7 @@ const SLIDERS_BY_MODE: Record<EffectMode, SliderDef[]> = {
     { key: 'tearLetterSpacing', label: '字间距', min: 0, max: 40, unit: 'px' },
     { key: 'tearLineSpacing', label: '行间距', min: 120, max: 280, unit: '%' },
   ],
-  imageFill: [
-    { key: 'padding', label: '边距', min: 0, max: 160, unit: 'px' },
-  ],
+  imageFill: [{ key: 'padding', label: '边距', min: 0, max: 160, unit: 'px' }],
 };
 
 /** imageFill 形状选项。 */
@@ -142,27 +143,6 @@ export function ParamControls({ mode, params, onChange, onReseed }: ParamControl
           </div>
         </label>
       )}
-
-      <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-        <label className="block text-xs text-neutral-600">
-          <span className="mb-1 block">字体颜色</span>
-          <input
-            type="color"
-            value={params.fontColor}
-            onChange={(e) => onChange('fontColor', e.target.value)}
-            className="h-8 w-full rounded border border-neutral-300"
-          />
-        </label>
-        <label className="block text-xs text-neutral-600">
-          <span className="mb-1 block">背景颜色</span>
-          <input
-            type="color"
-            value={params.bgColor}
-            onChange={(e) => onChange('bgColor', e.target.value)}
-            className="h-8 w-full rounded border border-neutral-300"
-          />
-        </label>
-      </div>
 
       <button
         type="button"
