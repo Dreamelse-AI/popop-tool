@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { createApimartProxy } from './apimartProxy';
+import { createAuthMiddleware } from './auth';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,10 +23,14 @@ const __dirname = path.dirname(__filename);
 const PORT = Number(process.env.PORT) || 3000;
 const APIMART_API_KEY = process.env.APIMART_API_KEY ?? '';
 const APIMART_API_TARGET = process.env.APIMART_API_TARGET ?? 'https://api.apimart.ai';
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN ?? '';
 
 const app = express();
 
-// 健康检查：放在最前，无任何依赖
+// 鉴权：放最前（中间件内部放行 /health）。未配 ACCESS_TOKEN 则不启用。
+app.use(createAuthMiddleware());
+
+// 健康检查：无任何依赖
 app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', time: new Date().toISOString() });
 });
@@ -52,6 +57,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`[server] 已启动 http://0.0.0.0:${PORT}`);
   console.log(`[server] apimart 目标：${APIMART_API_TARGET}`);
   console.log(`[server] apimart key：${APIMART_API_KEY ? '已配置' : '未配置（生成会 401）'}`);
+  console.log(`[server] 访问鉴权：${ACCESS_TOKEN ? '已开启（需 ?token= 或 cookie）' : '未开启（建议生产配置 ACCESS_TOKEN）'}`);
 });
 
 server.on('error', (err) => {

@@ -22,7 +22,7 @@ metadata:
     ingress.vke.volcengine.com/loadbalancer-scheduler: wrr
 spec:
   rules:
-    - host: popop.dev
+    - host: tool.popop.ai
       http:
         paths:
           - path: /

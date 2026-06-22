@@ -153,21 +153,29 @@ pnpm start           # node dist/server/index.mjs，监听 PORT（默认 3000）
 - `.github/workflows/deploy.yml`：push main → 质检 → 构建推镜像 → `kubectl apply -k k8s/`
 
 **密钥安全**：`APIMART_API_KEY` 是运行时 K8s Secret，绝不进镜像、不进前端 bundle。
-创建 Secret：
+创建 Secret（含访问口令）：
 
 ```bash
 kubectl -n fast-projects create secret generic popop-tool-secrets \
-  --from-literal=APIMART_API_KEY='sk-xxxxx'
+  --from-literal=APIMART_API_KEY='sk-xxxxx' \
+  --from-literal=ACCESS_TOKEN='一段随机口令'
 ```
 
+**访问鉴权**：服务端用 `ACCESS_TOKEN` + cookie 做简单口令鉴权（`server/auth.ts`）。
+用户带 `?token=<口令>` 首次访问 `https://tool.popop.ai/?token=xxx` 即种 cookie，
+之后免输。`/apimart` 也受鉴权保护，避免他人知道域名后直接调用花钱的生图接口。
+仅 `/health` 放行（K8s 探针）。未配 `ACCESS_TOKEN` 则不启用鉴权（本地开发）。
+
+> 域名：`tool.popop.ai`。`.ai` 域名建议走 HTTPS（在 ALB 侧配 TLS 证书）。
+> DNS 把 `tool.popop.ai` CNAME 指向集群 ALB；`ingress.yaml` 默认不由 CI 纳管。
 > 注：popop-tool 在能直连 apimart 的服务器上运行，无需 `UPSTREAM_PROXY`。
-> 本机连不上 apimart 不影响生产 —— 这正是部署上线要解决的问题。
 
 ### 服务端目录
 
 ```
 server/
-├── index.ts         Express 入口：静态托管 + /health + 挂载代理
+├── index.ts         Express 入口：鉴权 + 静态托管 + /health + 挂载代理
+├── auth.ts          访问口令鉴权（ACCESS_TOKEN + cookie）
 └── apimartProxy.ts  /apimart 反向代理（运行时注入 Authorization）
 ```
 
