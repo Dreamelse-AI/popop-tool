@@ -21,9 +21,22 @@ export function createApimartProxy() {
   const target = new URL(APIMART_API_TARGET);
   const lib = target.protocol === 'https:' ? https : http;
 
+  if (!APIMART_API_KEY) {
+    console.warn('[apimart] 未配置 APIMART_API_KEY，转发将不带鉴权头，上游会返回 “API key is required”');
+  }
+
   return (req: Request, res: Response): void => {
     // req.url 此处已是去掉 /apimart 前缀后的路径（express 子路由）
     const upstreamPath = req.url;
+
+    const headers: http.OutgoingHttpHeaders = {
+      ...filterHeaders(req.headers),
+      host: target.host,
+    };
+    // key 为空时不塞空 authorization 头，避免“看起来带了头其实是空”的误导
+    if (APIMART_API_KEY) {
+      headers.authorization = `Bearer ${APIMART_API_KEY}`;
+    }
 
     const options: https.RequestOptions = {
       protocol: target.protocol,
@@ -31,11 +44,7 @@ export function createApimartProxy() {
       port: target.port || (target.protocol === 'https:' ? 443 : 80),
       path: upstreamPath,
       method: req.method,
-      headers: {
-        ...filterHeaders(req.headers),
-        host: target.host,
-        authorization: APIMART_API_KEY ? `Bearer ${APIMART_API_KEY}` : '',
-      },
+      headers,
       timeout: UPSTREAM_TIMEOUT_MS,
     };
 

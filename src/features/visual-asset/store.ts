@@ -8,6 +8,7 @@ import type {
 import { generateConfigs } from '@/services/visualAssetEngine';
 import { expandToPrompt } from '@/services/promptExpander';
 import { generateImageByPrompt, ImageGenError } from '@/services/imageClient';
+import { useCustomStyleStore } from './customStyleStore';
 
 /** 批量生成的并发上限（小并发，避免打爆 apimart）。 */
 const CONCURRENCY = 3;
@@ -35,6 +36,8 @@ interface VisualAssetState {
   setResolution: (r: Resolution) => void;
   applySelection: (sel: VisualAssetSelection) => void;
   generate: () => Promise<void>;
+  /** 重试单条结果项（重新扩写并出图，配置不变） */
+  retryItem: (id: string) => Promise<void>;
   cancel: () => void;
   reset: () => void;
 }
@@ -43,7 +46,9 @@ interface VisualAssetState {
 /** 读取某维度当前选中数组（emotion/type 顶层，其余视为 dna 字段）。 */
 function readDim(sel: VisualAssetSelection, dim: string): string[] {
   if (dim === 'emotion') return sel.emotion;
+  if (dim === 'subject') return sel.subject;
   if (dim === 'type') return sel.type;
+  if (dim === 'style') return sel.style;
   return sel.dna[dim] ?? [];
 }
 
@@ -54,12 +59,23 @@ function writeDim(
   next: string[],
 ): VisualAssetSelection {
   if (dim === 'emotion') return { ...sel, emotion: next };
+  if (dim === 'subject') return { ...sel, subject: next };
   if (dim === 'type') return { ...sel, type: next };
+  if (dim === 'style') return { ...sel, style: next };
   return { ...sel, dna: { ...sel.dna, [dim]: next } };
 }
 
+/** 初始空选择（全维度全随机）。 */
+const EMPTY_SELECTION: VisualAssetSelection = {
+  emotion: [],
+  subject: [],
+  type: [],
+  style: [],
+  dna: {},
+};
+
 export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
-  selection: { emotion: [], type: [], dna: {} },
+  selection: { ...EMPTY_SELECTION },
   count: 4,
   ratio: '9:16',
   resolution: '2k',
@@ -88,8 +104,9 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
     get()._abort?.abort();
     const controller = new AbortController();
     const { selection, count, ratio, resolution } = get();
+    const styles = useCustomStyleStore.getState().styles;
 
-    const configs = generateConfigs(selection, count);
+    const configs = generateConfigs(selection, count, styles.map((s) => s.id));
     if (configs.length === 0) {
       set({ status: 'error', errorMessage: '没有可生成的组合，请调整选择' });
       return;
@@ -122,7 +139,7 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
         const item = items[idx];
         update(item.id, { status: 'generating' });
         try {
-          const prompt = await expandToPrompt(item.config);
+          const prompt = await expandToPrompt(item.config, styles, controller.signal);
           const image = await generateImageByPrompt(
             prompt,
             { size: ratio, resolution },
@@ -145,6 +162,36 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
       set({ status: 'done', _abort: null });
     }
   },
+  // [RETRY]
+  retryItem: async (id) => {
+    const target = get().items.find((it) => it.id === id);
+    if (!target) return;
+    const { ratio, resolution } = get();
+    const styles = useCustomStyleStore.getState().styles;
+    const controller = get()._abort ?? new AbortController();
+
+    set((s) => ({
+      items: s.items.map((it) =>
+        it.id === id ? { ...it, status: 'generating', error: undefined } : it,
+      ),
+    }));
+
+    try {
+      const prompt = await expandToPrompt(target.config, styles, controller.signal);
+      const image = await generateImageByPrompt(prompt, { size: ratio, resolution }, controller.signal);
+      set((s) => ({
+        items: s.items.map((it) =>
+          it.id === id ? { ...it, status: 'done', prompt, url: image.url } : it,
+        ),
+      }));
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return;
+      const msg = e instanceof ImageGenError ? e.message : e instanceof Error ? e.message : '生成失败';
+      set((s) => ({
+        items: s.items.map((it) => (it.id === id ? { ...it, status: 'error', error: msg } : it)),
+      }));
+    }
+  },
   // [CANCEL]
   cancel: () => {
     get()._abort?.abort();
@@ -154,7 +201,7 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
   reset: () => {
     get()._abort?.abort();
     set({
-      selection: { emotion: [], type: [], dna: {} },
+      selection: { ...EMPTY_SELECTION },
       count: 4,
       ratio: '9:16',
       resolution: '2k',

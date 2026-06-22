@@ -57,13 +57,37 @@ export const TYPE_OPTIONS: AssetOption[] = [
   opt('Landscape', '风景', 'landscape scene'),
   opt('Environment', '环境', 'environment scene'),
 ];
+// [SUBJECT]
+/**
+ * 主体：画面里的核心对象。None 表示纯氛围/无明确主体。
+ * 三态可选：不选→全随机（含 None），锁定单个，或多选限定随机。
+ */
+export const SUBJECT_OPTIONS: AssetOption[] = [
+  opt('None', '无主体', ''),
+  opt('Person', '人物', 'a single person'),
+  opt('Couple', '情侣', 'a couple'),
+  opt('Pet', '宠物', 'a cute pet'),
+  opt('Cat', '猫', 'a cat'),
+  opt('Dog', '狗', 'a dog'),
+  opt('Food', '美食', 'delicious food'),
+  opt('Coffee', '咖啡', 'a cup of coffee'),
+  opt('Dessert', '甜点', 'a dessert'),
+  opt('Flower', '花', 'flowers'),
+  opt('Plant', '植物', 'a potted plant'),
+  opt('Moon', '月亮', 'the moon'),
+  opt('Car', '汽车', 'a car'),
+  opt('Book', '书', 'an open book'),
+  opt('Architecture', '建筑', 'architecture'),
+];
 // [STYLE]
-/** 当前阶段单一全局 style pack，prompt 展开后注入。 */
-export const GLOBAL_STYLE: AssetOption = opt(
-  'Premium Atmospheric',
-  '高级氛围',
-  'premium minimalist design, atmospheric, soft volumetric depth, large negative space, high-end aesthetic',
-);
+/**
+ * Style 不再预置默认值。风格 pack 完全由用户在 UI 自填（名称 + 提示词），
+ * 持久化在 customStyleStore（localStorage），生成引擎与扩写器从 store 读取。
+ *
+ * 这里只保留一个“空风格”占位 id，用于：用户一个 style 都没填时，
+ * 引擎仍能产出配置（style 取该占位，prompt 不注入风格片段）。
+ */
+export const NO_STYLE_ID = 'none';
 // [DNA_ABSTRACT]
 const ABSTRACT_SCHEMA: DnaSchema = {
   type: 'abstract',
@@ -237,8 +261,8 @@ export const DNA_SCHEMAS: Record<AssetType, DnaSchema> = {
   environment: ENVIRONMENT_SCHEMA,
 };
 
-/** 当前第一版启用的 Type（先跑通 Abstract）。其余 schema 数据已就绪，放开即可用。 */
-export const ENABLED_TYPES: AssetType[] = ['abstract'];
+/** 全部 Type 启用（三套 schema 数据均已就绪）。 */
+export const ENABLED_TYPES: AssetType[] = ['abstract', 'landscape', 'environment'];
 
 /** 按 id 在某组选项里取元信息。 */
 export function findOption(options: AssetOption[], id: string): AssetOption | undefined {

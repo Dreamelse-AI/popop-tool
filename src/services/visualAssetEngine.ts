@@ -21,8 +21,9 @@ import type {
 } from '@/types/visualAsset';
 import {
   EMOTION_OPTIONS,
+  SUBJECT_OPTIONS,
+  NO_STYLE_ID,
   DNA_SCHEMAS,
-  GLOBAL_STYLE,
   ENABLED_TYPES,
 } from '@/data/visualAssetCatalog';
 
@@ -44,8 +45,11 @@ function resolveOne(selected: string[], allIds: string[]): string | null {
   return null;
 }
 
-/** 生成单条配置。 */
-function buildOneConfig(selection: VisualAssetSelection): AssetConfig | null {
+/** 生成单条配置。styleIds 为当前可用的自定义 style id 列表（可空）。 */
+function buildOneConfig(
+  selection: VisualAssetSelection,
+  styleIds: string[],
+): AssetConfig | null {
   // 1. type：用户选中的优先，否则在已启用 type 里随机
   const typePool = selection.type.length > 0 ? selection.type : ENABLED_TYPES;
   const type = resolveOne(selection.type, typePool) as AssetType | null;
@@ -56,7 +60,14 @@ function buildOneConfig(selection: VisualAssetSelection): AssetConfig | null {
   const emotion = resolveOne(selection.emotion, emotionIds);
   if (!emotion) return null;
 
-  // 3. DNA：按该 type 的 schema 逐字段
+  // 3. subject（三态；不选→含 None 的全域随机）
+  const subjectIds = SUBJECT_OPTIONS.map((o) => o.id);
+  const subject = resolveOne(selection.subject, subjectIds) ?? 'none';
+
+  // 4. style（三态；不选→全部已存 style pack 随机；一个都没存→无风格占位）
+  const style = resolveOne(selection.style, styleIds) ?? NO_STYLE_ID;
+
+  // 5. DNA：按该 type 的 schema 逐字段
   const schema = DNA_SCHEMAS[type];
   const dna: Record<string, string> = {};
   for (const field of schema.fields) {
@@ -67,7 +78,7 @@ function buildOneConfig(selection: VisualAssetSelection): AssetConfig | null {
     if (value) dna[field.key] = value;
   }
 
-  return { emotion, subject: 'None', type, style: GLOBAL_STYLE.id, dna };
+  return { emotion, subject, type, style, dna };
 }
 
 /** 可选字段且用户未选 → 不加入（符合规则 8 "sparingly"）。 */
@@ -81,16 +92,20 @@ function configKey(c: AssetConfig): string {
     .sort()
     .map((k) => `${k}=${c.dna[k]}`)
     .join('&');
-  return `${c.type}|${c.emotion}|${dnaKeys}`;
+  return `${c.type}|${c.emotion}|${c.subject}|${c.style}|${dnaKeys}`;
 }
 
 /**
  * 生成 N 条不重复的结构化配置。
+ * @param selection 三态选择
+ * @param count 目标条数
+ * @param styleIds 当前可用的自定义 style id 列表（来自 customStyleStore）
  * 若约束空间小于 N，尽力产出（达到上限的尝试次数后返回已有的）。
  */
 export function generateConfigs(
   selection: VisualAssetSelection,
   count: number,
+  styleIds: string[] = [],
 ): AssetConfig[] {
   const out: AssetConfig[] = [];
   const seen = new Set<string>();
@@ -99,7 +114,7 @@ export function generateConfigs(
 
   while (out.length < count && attempts < maxAttempts) {
     attempts++;
-    const cfg = buildOneConfig(selection);
+    const cfg = buildOneConfig(selection, styleIds);
     if (!cfg) break;
     const key = configKey(cfg);
     if (seen.has(key)) continue;
