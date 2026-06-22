@@ -19,13 +19,17 @@ interface SliderDef {
 /** 各模式显示哪些滑杆。 */
 const SLIDERS_BY_MODE: Record<EffectMode, SliderDef[]> = {
   rain: [
-    { key: 'minSize', label: '字号', min: 18, max: 80, unit: 'px' },
+    { key: 'minSize', label: '最小字号', min: 16, max: 70, unit: 'px' },
+    { key: 'maxSize', label: '最大字号', min: 20, max: 96, unit: 'px' },
     { key: 'blur', label: '层次模糊', min: 0, max: 12, unit: 'px' },
+    { key: 'spread', label: '错落程度', min: 0, max: 100, unit: '%' },
     { key: 'padding', label: '边距', min: 0, max: 160, unit: 'px' },
   ],
   barrage: [
-    { key: 'minSize', label: '字号', min: 18, max: 80, unit: 'px' },
+    { key: 'minSize', label: '最小字号', min: 16, max: 70, unit: 'px' },
+    { key: 'maxSize', label: '最大字号', min: 20, max: 96, unit: 'px' },
     { key: 'blur', label: '层次模糊', min: 0, max: 12, unit: 'px' },
+    { key: 'spread', label: '错落程度', min: 0, max: 100, unit: '%' },
     { key: 'padding', label: '边距', min: 0, max: 160, unit: 'px' },
   ],
   tearBlur: [
