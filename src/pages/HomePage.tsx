@@ -25,6 +25,14 @@ const TOOLS: ToolEntry[] = [
     path: '/tools/background',
     status: 'available',
   },
+  {
+    id: 'visual-asset',
+    name: '视觉资产生产引擎',
+    description:
+      'Emotion × Type × DNA 三态组合（锁定/多选随机/全随机），批量生成视觉资产，可接扩写模型。',
+    path: '/tools/visual-asset',
+    status: 'available',
+  },
 ];
 
 export function HomePage() {

@@ -98,6 +98,10 @@ export interface LayoutRecipe {
   params: EffectParams;
   /** 解析后的渲染风格（字体/配色/背景图） */
   style: RenderStyle;
+  /** 后台决策出的背景选择（配色/图片，供测试器展示读数） */
+  background: import('./catalog').Background;
+  /** imageFill 时后台决策的形状（供测试器展示读数） */
+  shape?: FillShape;
   /** 抽取来源：mock 阶段为 'mock'，后端接上后为 'model' */
   source: 'mock' | 'model';
 }
@@ -107,4 +111,6 @@ export interface ExtractLayoutInput {
   text: string;
   /** 可选：用户指定偏好的模式，抽取层可参考 */
   preferredMode?: EffectMode;
+  /** 可选：指定随机种子（用于"换一版"复现/变体）；不传则随机 */
+  seed?: number;
 }

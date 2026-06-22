@@ -1,53 +1,53 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MAX_INPUT_LENGTH } from '@/types/layout';
+import type { EffectMode, EffectParams, FillShape } from '@/types/layout';
+import type { Background } from '@/types/catalog';
 import { useTextLayoutStore } from '@/features/text-layout/store';
 import { LayoutCanvas, type LayoutCanvasHandle } from '@/features/text-layout/LayoutCanvas';
-import { ModePicker } from '@/features/text-layout/ModePicker';
-import { ParamControls } from '@/features/text-layout/ParamControls';
-import { BackgroundPicker } from '@/features/text-layout/BackgroundPicker';
-import { PromptPanel } from '@/features/text-layout/PromptPanel';
+import { getEffect } from '@/data/effectCatalog';
+import { getPalette } from '@/data/paletteLibrary';
+import { getImage } from '@/data/imageLibrary';
 import { downloadDataUrl } from '@/features/text-layout/exportImage';
 
-const PREVIEW_WIDTH = 420;
+const PREVIEW_WIDTH = 460;
 
+const SHAPE_LABEL: Record<FillShape, string> = {
+  heart: '爱心',
+  star: '星星',
+  circle: '圆形',
+  diamond: '菱形',
+  image: '上传图',
+};
+
+/**
+ * 链路生产测试器：输入文案 → 后台按框架自动决策（效果/配色/形状 + 区间随机参数）→ 出图。
+ * 界面只负责：喂文案、看成品、读后台这次到底选了什么（决策读数）、换一版、导出。
+ * 不在前端做手动风格选择，也不展示提示词——那些都在后台 layoutExtractor / buildPrompt 里。
+ */
 export function TextLayoutPage() {
   const canvasRef = useRef<LayoutCanvasHandle>(null);
   const [exporting, setExporting] = useState(false);
   const {
     inputText,
+    hasResult,
     mode,
     params,
     style,
     background,
-    shapeImage,
-    shapeImageName,
+    shape,
+    source,
     bgImage,
     status,
     errorMessage,
     setInputText,
-    setMode,
-    setParam,
-    setBackground,
-    setShapeImage,
-    reseed,
-    runExtract,
+    generate,
+    regenerate,
   } = useTextLayoutStore();
 
   const overLimit = inputText.length > MAX_INPUT_LENGTH;
-  const canExtract = inputText.trim().length > 0 && !overLimit && status !== 'extracting';
-  const hasContent = inputText.trim().length > 0 && !overLimit;
-
-  const handleImageUpload = (file: File | undefined) => {
-    if (!file) return;
-    const img = new Image();
-    img.onload = () => setShapeImage(img, file.name);
-    img.onerror = () => {
-      console.error('image.load.failed', file.name);
-      alert('图片加载失败，请换一张');
-    };
-    img.src = URL.createObjectURL(file);
-  };
+  const busy = status === 'generating';
+  const canGenerate = inputText.trim().length > 0 && !overLimit && !busy;
 
   const handleExport = () => {
     if (!canvasRef.current) return;
@@ -71,17 +71,17 @@ export function TextLayoutPage() {
         <Link to="/" className="text-sm text-neutral-500 hover:text-neutral-900">
           ← 返回工具站
         </Link>
-        <h1 className="mt-1 text-xl font-bold text-neutral-900">文字自动化排版</h1>
+        <h1 className="mt-1 text-xl font-bold text-neutral-900">文字自动化排版 · 链路测试器</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          输入文字（≤{MAX_INPUT_LENGTH} 字）→ 选特效 → 微调 → 导出 4:3 文字图片（1080×810）
+          输入文案（≤{MAX_INPUT_LENGTH} 字）→ 后台按框架自动选效果/配色/形状并区间随机参数 → 产出 4:3（1080×810）成品图
         </p>
       </header>
 
       <main className="mx-auto grid max-w-6xl grid-cols-1 gap-8 p-8 lg:grid-cols-2">
-        {/* 左侧：输入与控制 */}
+        {/* 左侧：输入 + 后台决策读数 */}
         <section className="flex flex-col gap-5">
           <div>
-            <label className="mb-2 block text-sm font-semibold text-neutral-700">输入文字</label>
+            <label className="mb-2 block text-sm font-semibold text-neutral-700">输入文案</label>
             <textarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
@@ -97,66 +97,51 @@ export function TextLayoutPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={runExtract}
-            disabled={!canExtract}
-            className="rounded-lg bg-neutral-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-neutral-300"
-          >
-            {status === 'extracting' ? '抽取中…' : '抽取并推荐特效'}
-          </button>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={generate}
+              disabled={!canGenerate}
+              className="flex-1 rounded-lg bg-neutral-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-neutral-300"
+            >
+              {busy ? '生成中…' : '生成'}
+            </button>
+            <button
+              type="button"
+              onClick={regenerate}
+              disabled={!canGenerate || !hasResult}
+              className="rounded-lg border border-neutral-900 px-5 py-3 text-sm font-semibold text-neutral-900 transition hover:bg-neutral-900 hover:text-white disabled:cursor-not-allowed disabled:border-neutral-300 disabled:text-neutral-300"
+            >
+              换一版
+            </button>
+          </div>
 
           {status === 'error' && (
             <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{errorMessage}</p>
           )}
 
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-neutral-700">排版特效</label>
-            <ModePicker selected={mode} onSelect={setMode} />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-neutral-700">背景</label>
-            <BackgroundPicker background={background} onSelect={setBackground} />
-          </div>
-
-          {mode === 'imageFill' && params.fillShape === 'image' && (
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-neutral-700">
-                上传形状图片
-              </label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => handleImageUpload(e.target.files?.[0])}
-                className="block w-full text-sm text-neutral-600 file:mr-3 file:rounded file:border-0 file:bg-neutral-900 file:px-4 file:py-2 file:text-white"
-              />
-              <p className="mt-1 text-xs text-neutral-400">
-                {shapeImageName
-                  ? `已上传：${shapeImageName}`
-                  : '建议黑白剪影或对比强烈的形状，文字会填进暗部。'}
-              </p>
-            </div>
+          {hasResult && (
+            <DecisionReadout
+              mode={mode}
+              params={params}
+              background={background}
+              shape={shape}
+              source={source}
+            />
           )}
-
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-neutral-700">参数微调</label>
-            <ParamControls mode={mode} params={params} onChange={setParam} onReseed={reseed} />
-          </div>
         </section>
 
-        {/* 右侧：预览与导出 */}
+        {/* 右侧：成品预览 + 导出 */}
         <section className="flex flex-col items-center gap-5">
-          <div className="text-sm font-semibold text-neutral-700">预览（4:3 · 1080×810）</div>
+          <div className="text-sm font-semibold text-neutral-700">成品（4:3 · 1080×810）</div>
           <div className="overflow-hidden rounded-lg border border-neutral-300 shadow-sm">
-            {hasContent ? (
+            {hasResult ? (
               <LayoutCanvas
                 ref={canvasRef}
                 mode={mode}
                 text={inputText}
                 params={params}
                 style={style}
-                shapeImage={shapeImage}
                 bgImage={bgImage}
                 displayWidth={PREVIEW_WIDTH}
               />
@@ -165,7 +150,7 @@ export function TextLayoutPage() {
                 className="flex items-center justify-center bg-white px-6 text-center text-sm text-neutral-400"
                 style={{ width: PREVIEW_WIDTH, height: (PREVIEW_WIDTH * 810) / 1080 }}
               >
-                输入文字后在此预览特效
+                输入文案后点「生成」，后台自动出图
               </div>
             )}
           </div>
@@ -173,24 +158,70 @@ export function TextLayoutPage() {
           <button
             type="button"
             onClick={handleExport}
-            disabled={!hasContent || exporting}
+            disabled={!hasResult || exporting}
             className="rounded-lg border border-neutral-900 px-5 py-3 text-sm font-semibold text-neutral-900 transition hover:bg-neutral-900 hover:text-white disabled:cursor-not-allowed disabled:border-neutral-300 disabled:text-neutral-300"
           >
             {exporting ? '导出中…' : '导出 PNG'}
           </button>
         </section>
       </main>
+    </div>
+  );
+}
 
-      {/* 生产链路面板：提示词片段 + 输出示例 */}
-      <section className="mx-auto max-w-6xl px-8 pb-12">
-        <div className="rounded-xl border border-neutral-200 bg-white p-6">
-          <h2 className="mb-1 text-base font-bold text-neutral-900">生产链路对接</h2>
-          <p className="mb-4 text-sm text-neutral-500">
-            这套排版/配色目录会拼进模型的内容生成提示词；模型在生成文案时一并选好风格，按下方 JSON 结构输出。
-          </p>
-          <PromptPanel mode={mode} params={params} background={background} text={inputText} />
-        </div>
-      </section>
+interface DecisionReadoutProps {
+  mode: EffectMode;
+  params: EffectParams;
+  background: Background;
+  shape?: FillShape;
+  source: 'mock' | 'model';
+}
+
+/** 后台这一版到底选了什么 + 随机出的参数，纯只读，用于核对链路产出。 */
+function DecisionReadout({ mode, params, background, shape, source }: DecisionReadoutProps) {
+  const effect = getEffect(mode);
+  const bgLabel =
+    background.type === 'palette'
+      ? `配色 · ${getPalette(background.paletteId).name}`
+      : `图片 · ${getImage(background.imageId)?.name ?? background.imageId}`;
+
+  const paramRows = effect.params.map((spec) => {
+    const value = params[spec.key as keyof EffectParams];
+    return { label: spec.label, value: `${value}${spec.unit ?? ''}` };
+  });
+
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-white p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-bold text-neutral-900">后台决策读数</h2>
+        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500">
+          来源 {source === 'model' ? '模型' : 'mock 规则'}
+        </span>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+        <Row label="效果" value={effect.name} />
+        <Row label="背景" value={bgLabel} />
+        {shape && <Row label="填充形状" value={SHAPE_LABEL[shape]} />}
+      </dl>
+
+      <div className="mt-4 border-t border-neutral-100 pt-3">
+        <div className="mb-2 text-xs font-semibold text-neutral-500">区间随机参数</div>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+          {paramRows.map((r) => (
+            <Row key={r.label} label={r.label} value={r.value} />
+          ))}
+        </dl>
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="shrink-0 text-neutral-400">{label}</dt>
+      <dd className="truncate text-right font-medium text-neutral-800">{value}</dd>
     </div>
   );
 }

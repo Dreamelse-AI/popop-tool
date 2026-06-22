@@ -73,18 +73,24 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-/** 提交生成任务，返回 task_id。 */
-async function createTask(
-  recipe: BackgroundRecipe,
+/** 输出规格：比例 + 分辨率。 */
+export interface ImageGenOptions {
+  size: string;
+  resolution: string;
+}
+
+/** 提交生成任务（直接给定 prompt），返回 task_id。 */
+async function createTaskByPrompt(
+  prompt: string,
+  opts: ImageGenOptions,
   signal?: AbortSignal,
 ): Promise<string> {
-  const prompt = buildPrompt(recipe.selection, recipe.extraKeywords);
   const body: GenerateImageRequest = {
     model: APIMART_MODEL,
     prompt,
     n: 1,
-    size: recipe.ratio,
-    resolution: recipe.resolution,
+    size: opts.size as GenerateImageRequest['size'],
+    resolution: opts.resolution as GenerateImageRequest['resolution'],
   };
 
   let res: Response;
@@ -108,11 +114,22 @@ async function createTask(
   const json = (await res.json()) as CreateTaskResponse;
   const taskId = json.data?.[0]?.task_id ?? json.task_id;
   if (!taskId) {
-    throw new ImageGenError(
-      json.error?.message || '提交任务失败：未返回 task_id',
-    );
+    throw new ImageGenError(json.error?.message || '提交任务失败：未返回 task_id');
   }
   return taskId;
+}
+
+/** 提交生成任务，返回 task_id（背景生成器用：先按五层拼 prompt）。 */
+async function createTask(
+  recipe: BackgroundRecipe,
+  signal?: AbortSignal,
+): Promise<string> {
+  const prompt = buildPrompt(recipe.selection, recipe.extraKeywords);
+  return createTaskByPrompt(
+    prompt,
+    { size: recipe.ratio, resolution: recipe.resolution },
+    signal,
+  );
 }
 
 /** 轮询任务直到完成，返回图片直链。 */
@@ -178,6 +195,22 @@ export async function generateBackground(
   signal?: AbortSignal,
 ): Promise<GeneratedImage> {
   const taskId = await createTask(recipe, signal);
+  const url = await pollTask(taskId, signal);
+  return { url };
+}
+
+/**
+ * 按给定 prompt 生成一张图（通用底层，供视觉资产引擎等复用）。
+ * @param prompt 完整 image prompt（已展开）
+ * @param opts 输出规格（size 比例 / resolution 档位）
+ * @param signal 可选取消信号
+ */
+export async function generateImageByPrompt(
+  prompt: string,
+  opts: ImageGenOptions,
+  signal?: AbortSignal,
+): Promise<GeneratedImage> {
+  const taskId = await createTaskByPrompt(prompt, opts, signal);
   const url = await pollTask(taskId, signal);
   return { url };
 }

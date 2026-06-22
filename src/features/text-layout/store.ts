@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { EffectMode, EffectParams, RenderStyle } from '@/types/layout';
+import type { EffectMode, EffectParams, FillShape, RenderStyle } from '@/types/layout';
 import type { Background } from '@/types/catalog';
 import { DEFAULT_MODE } from '@/data/effectCatalog';
 import { DEFAULT_PALETTE_ID } from '@/data/paletteLibrary';
@@ -7,35 +7,38 @@ import { getImage } from '@/data/imageLibrary';
 import { randomizeParams, resolveStyle } from '@/services/params';
 import { extractLayout } from '@/services/layoutExtractor';
 
-type Status = 'idle' | 'extracting' | 'ready' | 'error';
+type Status = 'idle' | 'generating' | 'ready' | 'error';
 
 const INITIAL_BG: Background = { type: 'palette', paletteId: DEFAULT_PALETTE_ID };
 
+/**
+ * 链路生产测试器状态。
+ * 流程：输入文案 → generate()（后台按框架自动决策 + 区间随机）→ 出图 + 决策读数。
+ * 界面不做手动风格选择；这些都由 extractLayout 自动产出。
+ */
 interface TextLayoutState {
   inputText: string;
+  /** 是否已产出一版结果 */
+  hasResult: boolean;
+
+  // —— 后台决策出的整套配方（只读展示 + 渲染用）——
   mode: EffectMode;
   params: EffectParams;
-  background: Background;
   style: RenderStyle;
-  /** imageFill 上传图（fillShape='image' 时，不入持久化） */
-  shapeImage: HTMLImageElement | null;
-  shapeImageName: string | null;
-  /** 背景图（来自图片库，已加载） */
+  background: Background;
+  shape?: FillShape;
+  source: 'mock' | 'model';
+  /** 背景图（图片库背景时加载） */
   bgImage: HTMLImageElement | null;
+
   status: Status;
   errorMessage: string | null;
 
   setInputText: (text: string) => void;
-  /** 切换效果：在该效果区间内随机出参数 */
-  setMode: (mode: EffectMode) => void;
-  /** 微调单个数值参数（调试用） */
-  setParam: <K extends keyof EffectParams>(key: K, value: EffectParams[K]) => void;
-  /** 选择背景（配色或图片，二选一） */
-  setBackground: (bg: Background) => void;
-  setShapeImage: (image: HTMLImageElement | null, name: string | null) => void;
-  /** 重掷随机种子并在区间内重新随机参数 */
-  reseed: () => void;
-  runExtract: () => Promise<void>;
+  /** 生成一版（随机新种子） */
+  generate: () => Promise<void>;
+  /** 换一版（同文案，新随机，得到不同效果/配色/参数） */
+  regenerate: () => Promise<void>;
   reset: () => void;
 }
 
@@ -59,72 +62,63 @@ function loadBgImage(set: (partial: Partial<TextLayoutState>) => void, bg: Backg
   img.src = entry.url;
 }
 
+async function runGenerate(
+  set: (partial: Partial<TextLayoutState>) => void,
+  get: () => TextLayoutState,
+): Promise<void> {
+  const { inputText } = get();
+  set({ status: 'generating', errorMessage: null });
+  try {
+    const recipe = await extractLayout({ text: inputText });
+    set({
+      mode: recipe.mode,
+      params: recipe.params,
+      style: recipe.style,
+      background: recipe.background,
+      shape: recipe.shape,
+      source: recipe.source,
+      hasResult: true,
+      status: 'ready',
+    });
+    loadBgImage(set, recipe.background);
+  } catch (e) {
+    set({
+      status: 'error',
+      errorMessage: e instanceof Error ? e.message : '生成失败，请重试',
+    });
+  }
+}
+
 export const useTextLayoutStore = create<TextLayoutState>((set, get) => ({
   inputText: '',
+  hasResult: false,
+
   mode: DEFAULT_MODE,
   params: randomizeParams(DEFAULT_MODE, 1),
-  background: INITIAL_BG,
   style: resolveStyle(INITIAL_BG),
-  shapeImage: null,
-  shapeImageName: null,
+  background: INITIAL_BG,
+  shape: undefined,
+  source: 'mock',
   bgImage: null,
+
   status: 'idle',
   errorMessage: null,
 
   setInputText: (text) => set({ inputText: text }),
 
-  setMode: (mode) => {
-    const prev = get().params;
-    // 切换效果时保留离散项（形状/方向），数值在新效果区间内随机
-    set({
-      mode,
-      params: randomizeParams(mode, prev.seed, {
-        fillShape: prev.fillShape,
-        fillDirection: prev.fillDirection,
-      }),
-    });
-  },
-
-  setParam: (key, value) => set((s) => ({ params: { ...s.params, [key]: value } })),
-
-  setBackground: (bg) => {
-    set({ background: bg, style: resolveStyle(bg) });
-    loadBgImage(set, bg);
-  },
-
-  setShapeImage: (image, name) => set({ shapeImage: image, shapeImageName: name }),
-
-  reseed: () =>
-    set((s) => ({
-      params: randomizeParams(s.mode, Math.floor(Math.random() * 9_999_999) + 1, {
-        fillShape: s.params.fillShape,
-        fillDirection: s.params.fillDirection,
-      }),
-    })),
-
-  runExtract: async () => {
-    const { inputText, mode } = get();
-    set({ status: 'extracting', errorMessage: null });
-    try {
-      const recipe = await extractLayout({ text: inputText, preferredMode: mode });
-      set({ mode: recipe.mode, params: recipe.params, style: recipe.style, status: 'ready' });
-    } catch (e) {
-      set({
-        status: 'error',
-        errorMessage: e instanceof Error ? e.message : '抽取失败，请重试',
-      });
-    }
-  },
+  generate: () => runGenerate(set, get),
+  regenerate: () => runGenerate(set, get),
 
   reset: () =>
     set({
       inputText: '',
+      hasResult: false,
       mode: DEFAULT_MODE,
       params: randomizeParams(DEFAULT_MODE, 1),
-      background: INITIAL_BG,
       style: resolveStyle(INITIAL_BG),
-      shapeImage: null,
-      shapeImageName: null,
+      background: INITIAL_BG,
+      shape: undefined,
+      source: 'mock',
       bgImage: null,
       status: 'idle',
       errorMessage: null,

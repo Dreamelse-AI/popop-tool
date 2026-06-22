@@ -6,6 +6,55 @@
 
 React 19 + TypeScript + Vite 7 + Tailwind v4 + Zustand + react-router-dom 7。
 
+## 工具三：视觉资产生产引擎
+
+Visual Asset Production Engine v1。五层：Emotion / Subject / Type / DNA / Style。
+
+```
+选择（三态）→ [生成引擎] 展开 N 条结构化配置
+  → [扩写模型 expandToPrompt] 展开成 image prompt（现为 mock，后端可接）
+  → [apimart 生图] generateImageByPrompt → 批量结果网格
+```
+
+**三态交互**：每个维度的选项全部展示，点选切换三种状态——
+- 不选 → 该维度全域随机
+- 选 1 个 → 锁定
+- 选多个 → 在选中里随机
+
+配合「数量 N」即可覆盖：单张精准、批量随机、限定场景批量等。
+
+**结构化配置**（规格 Output Format）：
+
+```json
+{ "emotion": "", "subject": "None", "type": "", "style": "", "dna": {} }
+```
+
+- **Emotion**：25 种（Daily 20 + Plot 5），主驱动
+- **Subject**：当前固定 `None`
+- **Type**：`abstract / landscape / environment`，决定 DNA 字段集
+- **DNA**：随 Type 变（Abstract: motion/medium/light/color/blur/density；Landscape/Environment 各有字段，可选 weather/season）
+- **Style**：当前单一全局 pack，prompt 展开后注入
+
+> 第一版启用 `abstract`（`ENABLED_TYPES`），其余 schema 数据已就绪，放开即可用。
+> 扩写模型接口在 `src/services/promptExpander.ts`，`USE_EXPANDER` 置 `true` 并实现
+> `expandViaBackend` 即接入，调用方不变。批量生图小并发（同时 3 张）。
+
+### 目录
+
+```
+src/
+├── types/visualAsset.ts             契约：Emotion/Type/DNA schema/三态 Selection/配置
+├── data/visualAssetCatalog.ts       全部目录数据 + 三套 DNA schema + 全局 Style
+├── services/
+│   ├── visualAssetEngine.ts         三态解析 + 随机抽取 + 去重 → N 条配置
+│   ├── promptExpander.ts            扩写：mock 拼装 / 后端占位
+│   └── imageClient.ts               generateImageByPrompt（与背景生成器共用底层）
+├── features/visual-asset/
+│   ├── store.ts                     三态选择 + 批量小并发生成 + 取消
+│   └── ChipGroup.tsx                三态 chip 选择器
+└── pages/VisualAssetPage.tsx        页面组装
+```
+
 ## 工具二：氛围背景图生成器
 
 Atmospheric Motion Background System v1.0。组合五层维度生成统一品牌语言的抽象氛围背景：
