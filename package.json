@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "生产链路工具站：产品内容管线及可视化",
+  "packageManager": "pnpm@10.33.0",
   "engines": {
     "node": ">=20"
   },
