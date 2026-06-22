@@ -28,16 +28,6 @@ export const DEFAULT_PARAMS: EffectParams = {
 };
 
 /** 数值型参数的键（可被区间随机覆盖的）。 */
-const NUMERIC_KEYS = [
-  'minSize',
-  'maxSize',
-  'blur',
-  'padding',
-  'spread',
-  'tearLetterSpacing',
-  'tearLineSpacing',
-  'tearBlurRadius',
-] as const;
 
 /**
  * 在效果库定义的区间内随机出一套数值参数（生产链路核心）。
@@ -54,16 +44,13 @@ export function randomizeParams(
 ): EffectParams {
   const usedSeed = seed ?? Math.floor(Math.random() * 9_999_999) + 1;
   const rng = mulberry32(usedSeed);
-  const ranges = getEffect(mode).paramRanges;
+  const specs = getEffect(mode).params;
 
   const params: EffectParams = { ...DEFAULT_PARAMS, seed: usedSeed };
 
-  for (const key of NUMERIC_KEYS) {
-    const range = ranges[key];
-    if (range) {
-      const [min, max] = range;
-      params[key] = Math.round(min + rng() * (max - min));
-    }
+  for (const spec of specs) {
+    const [min, max] = spec.range;
+    params[spec.key] = Math.round(min + rng() * (max - min));
   }
 
   // 保证 maxSize >= minSize

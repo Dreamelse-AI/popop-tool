@@ -1,4 +1,5 @@
 import type { EffectMode, EffectParams, FillShape } from '@/types/layout';
+import { getEffect } from '@/data/effectCatalog';
 
 interface ParamControlsProps {
   mode: EffectMode;
@@ -6,45 +7,6 @@ interface ParamControlsProps {
   onChange: <K extends keyof EffectParams>(key: K, value: EffectParams[K]) => void;
   onReseed: () => void;
 }
-
-interface SliderDef {
-  key: keyof EffectParams;
-  label: string;
-  min: number;
-  max: number;
-  step?: number;
-  unit?: string;
-}
-
-/**
- * 各模式显示哪些滑杆（仅调试用）。
- * 生产链路不用这些滑杆，参数由 randomizeParams 在效果库区间内随机。
- */
-const SLIDERS_BY_MODE: Record<EffectMode, SliderDef[]> = {
-  rain: [
-    { key: 'minSize', label: '最小字号', min: 16, max: 70, unit: 'px' },
-    { key: 'maxSize', label: '最大字号', min: 20, max: 96, unit: 'px' },
-    { key: 'blur', label: '层次模糊', min: 0, max: 12, unit: 'px' },
-    { key: 'spread', label: '错落程度', min: 0, max: 100, unit: '%' },
-    { key: 'padding', label: '边距', min: 0, max: 160, unit: 'px' },
-  ],
-  barrage: [
-    { key: 'minSize', label: '最小字号', min: 16, max: 70, unit: 'px' },
-    { key: 'maxSize', label: '最大字号', min: 20, max: 96, unit: 'px' },
-    { key: 'blur', label: '层次模糊', min: 0, max: 12, unit: 'px' },
-    { key: 'spread', label: '错落程度', min: 0, max: 100, unit: '%' },
-    { key: 'padding', label: '边距', min: 0, max: 160, unit: 'px' },
-  ],
-  tearBlur: [
-    { key: 'minSize', label: '字号', min: 20, max: 120, unit: 'px' },
-    { key: 'blur', label: '模糊强度', min: 4, max: 8, unit: 'px' },
-    { key: 'tearBlurRadius', label: '模糊圆大小', min: 80, max: 200, unit: 'px' },
-    { key: 'spread', label: '分散程度', min: 0, max: 100, unit: '%' },
-    { key: 'tearLetterSpacing', label: '字间距', min: 0, max: 40, unit: 'px' },
-    { key: 'tearLineSpacing', label: '行间距', min: 120, max: 280, unit: '%' },
-  ],
-  imageFill: [{ key: 'padding', label: '边距', min: 0, max: 160, unit: 'px' }],
-};
 
 /** imageFill 形状选项。 */
 const FILL_SHAPES: Array<{ value: FillShape; label: string }> = [
@@ -55,28 +17,32 @@ const FILL_SHAPES: Array<{ value: FillShape; label: string }> = [
   { value: 'image', label: '上传图片' },
 ];
 
+/**
+ * 参数微调（仅调试用）。滑杆从效果库的 params 规格自动生成，
+ * 与生产链路区间共用同一份定义，不会出现两处不一致。
+ */
 export function ParamControls({ mode, params, onChange, onReseed }: ParamControlsProps) {
-  const sliders = SLIDERS_BY_MODE[mode];
+  const specs = getEffect(mode).params;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-        {sliders.map((s) => (
-          <label key={s.key} className="block text-xs text-neutral-600">
+        {specs.map((spec) => (
+          <label key={spec.key} className="block text-xs text-neutral-600">
             <span className="mb-1 flex justify-between">
-              <span>{s.label}</span>
+              <span>{spec.label}</span>
               <span className="tabular-nums text-neutral-400">
-                {params[s.key] as number}
-                {s.unit ?? ''}
+                {params[spec.key]}
+                {spec.unit ?? ''}
               </span>
             </span>
             <input
               type="range"
-              min={s.min}
-              max={s.max}
-              step={s.step ?? 1}
-              value={params[s.key] as number}
-              onChange={(e) => onChange(s.key, Number(e.target.value) as never)}
+              min={spec.range[0]}
+              max={spec.range[1]}
+              step={spec.step ?? 1}
+              value={params[spec.key]}
+              onChange={(e) => onChange(spec.key, Number(e.target.value) as never)}
               className="w-full accent-neutral-900"
             />
           </label>

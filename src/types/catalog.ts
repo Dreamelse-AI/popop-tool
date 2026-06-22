@@ -9,15 +9,40 @@
  *       数值参数（字号/模糊/边距…）由本地在区间内随机（见 randomizeParams）。
  */
 
-import type { EffectMode, EffectParams, FillShape } from './layout';
+import type { EffectMode, FillShape } from './layout';
 
 /** 数值参数的随机区间：[最小, 最大]。生成时在区间内随机取值。 */
 export type ParamRange = [min: number, max: number];
 
-/** 一个效果可随机的数值参数区间集合（只列该效果实际用到的项）。 */
-export type EffectParamRanges = Partial<
-  Record<Extract<keyof EffectParams, string>, ParamRange>
->;
+/** 可被区间随机的数值参数键（seed 不在内，单独处理）。 */
+export type NumericParamKey =
+  | 'minSize'
+  | 'maxSize'
+  | 'blur'
+  | 'padding'
+  | 'spread'
+  | 'tearLetterSpacing'
+  | 'tearLineSpacing'
+  | 'tearBlurRadius'
+  | 'imageThreshold';
+
+/**
+ * 单个参数的规格：自描述（键 + 标签 + 单位 + 区间 + 步进）。
+ * 这是参数的「单一事实源」，同时供：
+ *   - randomizeParams：按 range 在区间内随机
+ *   - UI 滑杆：用 label/unit/range/step 渲染
+ */
+export interface ParamSpec {
+  key: NumericParamKey;
+  /** UI 显示的中文标签 */
+  label: string;
+  /** 单位，如 'px' / '%'；无单位可省 */
+  unit?: string;
+  /** 随机区间，同时作为滑杆上下界 */
+  range: ParamRange;
+  /** 滑杆步进，默认 1 */
+  step?: number;
+}
 
 /** 排版效果库的一条目录项。 */
 export interface EffectEntry {
@@ -27,8 +52,8 @@ export interface EffectEntry {
   name: string;
   /** 给模型判断「何时该选它」的描述，会拼进 prompt */
   whenToUse: string;
-  /** 该效果数值参数的随机区间（生产链路在此区间内随机） */
-  paramRanges: EffectParamRanges;
+  /** 该效果的参数规格清单（只列本效果实际用到的参数，无空字段） */
+  params: ParamSpec[];
   /** 缩略图强调色（仅 UI 选择列表用） */
   swatch: string;
   /** 该效果是否需要形状（仅 imageFill = true） */
