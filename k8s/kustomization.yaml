@@ -18,7 +18,7 @@ resources:
   - hpa.yaml
 
 images:
-  - name: registry.ap-northeast-1.aliyuncs.com/fast-project/popop-tool
+  - name: wjm20260616-registry.ap-northeast-1.cr.aliyuncs.com/popop-i18n-prod/fast-project/popop-tool
     newTag: latest
 
 labels:

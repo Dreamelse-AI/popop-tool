@@ -37,7 +37,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: popop-tool
-          image: registry.ap-northeast-1.aliyuncs.com/fast-project/popop-tool:latest
+          image: wjm20260616-registry.ap-northeast-1.cr.aliyuncs.com/popop-i18n-prod/fast-project/popop-tool:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

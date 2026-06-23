@@ -17,8 +17,8 @@ on:
     branches: [main]
 
 env:
-  REGISTRY: registry.ap-northeast-1.aliyuncs.com
-  IMAGE_NAME: fast-project/popop-tool
+  REGISTRY: wjm20260616-registry.ap-northeast-1.cr.aliyuncs.com
+  IMAGE_NAME: popop-i18n-prod/fast-project/popop-tool
 
 concurrency:
   group: cicd-${{ github.ref }}
