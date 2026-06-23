@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MAX_INPUT_LENGTH } from '@/types/layout';
-import type { EffectMode, EffectParams, FillShape } from '@/types/layout';
+import type { EffectMode, EffectParams } from '@/types/layout';
 import type { Background } from '@/types/catalog';
 import { useTextLayoutStore } from '@/features/text-layout/store';
 import { LayoutCanvas, type LayoutCanvasHandle } from '@/features/text-layout/LayoutCanvas';
+import { EffectPicker } from '@/features/text-layout/EffectPicker';
+import { PalettePicker } from '@/features/text-layout/PalettePicker';
 import { getEffect } from '@/data/effectCatalog';
 import { getPalette } from '@/data/paletteLibrary';
 import { getImage } from '@/data/imageLibrary';
@@ -12,16 +14,8 @@ import { downloadDataUrl } from '@/features/text-layout/exportImage';
 
 const PREVIEW_WIDTH = 460;
 
-const SHAPE_LABEL: Record<FillShape, string> = {
-  heart: '爱心',
-  star: '星星',
-  circle: '圆形',
-  diamond: '菱形',
-  image: '上传图',
-};
-
 /**
- * 链路生产测试器：输入文案 → 后台按框架自动决策（效果/配色/形状 + 区间随机参数）→ 出图。
+ * 链路生产测试器：输入文案 → 后台按框架自动决策（效果/配色 + 区间随机参数）→ 出图。
  * 界面只负责：喂文案、看成品、读后台这次到底选了什么（决策读数）、换一版、导出。
  * 不在前端做手动风格选择，也不展示提示词——那些都在后台 layoutExtractor / buildPrompt 里。
  */
@@ -31,16 +25,19 @@ export function TextLayoutPage() {
   const {
     inputText,
     hasResult,
+    preferredMode,
+    preferredPaletteId,
     mode,
     params,
     style,
     background,
-    shape,
     source,
     bgImage,
     status,
     errorMessage,
     setInputText,
+    setPreferredMode,
+    setPreferredPaletteId,
     generate,
     regenerate,
   } = useTextLayoutStore();
@@ -73,7 +70,7 @@ export function TextLayoutPage() {
         </Link>
         <h1 className="mt-1 text-xl font-bold text-neutral-900">文字自动化排版 · 链路测试器</h1>
         <p className="mt-1 text-sm text-neutral-500">
-          输入文案（≤{MAX_INPUT_LENGTH} 字）→ 后台按框架自动选效果/配色/形状并区间随机参数 → 产出 4:3（1080×810）成品图
+          输入文案（≤{MAX_INPUT_LENGTH} 字）→ 后台按框架自动选效果/配色并区间随机参数 → 产出 4:3（1080×810）成品图
         </p>
       </header>
 
@@ -95,6 +92,20 @@ export function TextLayoutPage() {
               </span>
               {overLimit && <span className="text-red-500">已超出字数上限</span>}
             </div>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-neutral-700">
+              排版效果 <span className="font-normal text-neutral-400">（可锁定，默认随机）</span>
+            </label>
+            <EffectPicker value={preferredMode} onChange={setPreferredMode} />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-neutral-700">
+              配色 <span className="font-normal text-neutral-400">（可锁定，默认随机）</span>
+            </label>
+            <PalettePicker value={preferredPaletteId} onChange={setPreferredPaletteId} />
           </div>
 
           <div className="flex gap-3">
@@ -125,7 +136,6 @@ export function TextLayoutPage() {
               mode={mode}
               params={params}
               background={background}
-              shape={shape}
               source={source}
             />
           )}
@@ -173,12 +183,11 @@ interface DecisionReadoutProps {
   mode: EffectMode;
   params: EffectParams;
   background: Background;
-  shape?: FillShape;
   source: 'mock' | 'model';
 }
 
 /** 后台这一版到底选了什么 + 随机出的参数，纯只读，用于核对链路产出。 */
-function DecisionReadout({ mode, params, background, shape, source }: DecisionReadoutProps) {
+function DecisionReadout({ mode, params, background, source }: DecisionReadoutProps) {
   const effect = getEffect(mode);
   const bgLabel =
     background.type === 'palette'
@@ -202,7 +211,6 @@ function DecisionReadout({ mode, params, background, shape, source }: DecisionRe
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
         <Row label="效果" value={effect.name} />
         <Row label="背景" value={bgLabel} />
-        {shape && <Row label="填充形状" value={SHAPE_LABEL[shape]} />}
       </dl>
 
       <div className="mt-4 border-t border-neutral-100 pt-3">

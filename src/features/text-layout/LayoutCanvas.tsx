@@ -8,8 +8,6 @@ interface LayoutCanvasProps {
   text: string;
   params: EffectParams;
   style: RenderStyle;
-  /** imageFill 上传图（fillShape='image' 时） */
-  shapeImage?: HTMLImageElement | null;
   /** 背景图（来自图片库，已加载） */
   bgImage?: HTMLImageElement | null;
   fontWeight?: string;
@@ -28,7 +26,7 @@ export interface LayoutCanvasHandle {
  */
 export const LayoutCanvas = forwardRef<LayoutCanvasHandle, LayoutCanvasProps>(
   (
-    { mode, text, params, style, shapeImage = null, bgImage = null, fontWeight = '400', displayWidth },
+    { mode, text, params, style, bgImage = null, fontWeight = '400', displayWidth },
     ref,
   ) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -38,8 +36,8 @@ export const LayoutCanvas = forwardRef<LayoutCanvasHandle, LayoutCanvasProps>(
       if (!canvas) return;
       canvas.width = CANVAS_WIDTH;
       canvas.height = CANVAS_HEIGHT;
-      renderLayout(canvas, { mode, text, params, style, shapeImage, bgImage, scale: 1, fontWeight });
-    }, [mode, text, params, style, shapeImage, bgImage, fontWeight]);
+      renderLayout(canvas, { mode, text, params, style, bgImage, scale: 1, fontWeight });
+    }, [mode, text, params, style, bgImage, fontWeight]);
 
     useImperativeHandle(
       ref,
@@ -48,11 +46,11 @@ export const LayoutCanvas = forwardRef<LayoutCanvasHandle, LayoutCanvasProps>(
           const out = document.createElement('canvas');
           out.width = CANVAS_WIDTH * scale;
           out.height = CANVAS_HEIGHT * scale;
-          renderLayout(out, { mode, text, params, style, shapeImage, bgImage, scale, fontWeight });
+          renderLayout(out, { mode, text, params, style, bgImage, scale, fontWeight });
           return out.toDataURL('image/png');
         },
       }),
-      [mode, text, params, style, shapeImage, bgImage, fontWeight],
+      [mode, text, params, style, bgImage, fontWeight],
     );
 
     return (

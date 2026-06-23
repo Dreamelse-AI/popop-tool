@@ -38,7 +38,6 @@ const COMMON_RANGES: Record<EffectMode, Record<CommonKey, ParamRange | null>> = 
   rain: { minSize: [28, 34], maxSize: [54, 66], blur: [3, 7], spread: [40, 65], padding: [40, 64] },
   barrage: { minSize: [28, 34], maxSize: [54, 66], blur: [3, 7], spread: [40, 65], padding: [40, 64] },
   tearBlur: { minSize: [44, 60], maxSize: null, blur: [4, 8], spread: [35, 60], padding: null },
-  imageFill: { minSize: null, maxSize: null, blur: null, spread: null, padding: [32, 56] },
 };
 
 /**
@@ -56,7 +55,7 @@ const EXTRA_PARAMS: Partial<Record<EffectMode, ParamSpec[]>> = {
 /** 效果元信息（与参数无关的展示/选型字段）。 */
 const EFFECT_META: Record<
   EffectMode,
-  { name: string; whenToUse: string; swatch: string; needsShape?: boolean }
+  { name: string; whenToUse: string; swatch: string }
 > = {
   rain: {
     name: '竖排雨落层次',
@@ -73,15 +72,9 @@ const EFFECT_META: Record<
     whenToUse: '情绪化、内省的短文案；居中排版叠加局部模糊，含蓄克制。',
     swatch: '#9aa0c0',
   },
-  imageFill: {
-    name: '图片填充字',
-    whenToUse: '主题鲜明、可对应具象形状（爱心/星星等）的文案；文字填满形状内部。',
-    swatch: '#7dbd8a',
-    needsShape: true,
-  },
 };
 
-const EFFECT_ORDER: EffectMode[] = ['rain', 'barrage', 'tearBlur', 'imageFill'];
+const EFFECT_ORDER: EffectMode[] = ['rain', 'barrage', 'tearBlur'];
 
 /** 合并公共参数（按列序，跳过 null）+ 异化参数，生成该效果的 ParamSpec 清单。 */
 function buildParams(mode: EffectMode): ParamSpec[] {
@@ -101,7 +94,6 @@ export const EFFECT_CATALOG: EffectEntry[] = EFFECT_ORDER.map((mode) => ({
   name: EFFECT_META[mode].name,
   whenToUse: EFFECT_META[mode].whenToUse,
   swatch: EFFECT_META[mode].swatch,
-  needsShape: EFFECT_META[mode].needsShape,
   params: buildParams(mode),
 }));
 

@@ -22,16 +22,7 @@ export const MAX_INPUT_LENGTH = 500;
 export type EffectMode =
   | 'rain' // 竖排雨落层次
   | 'barrage' // 横排弹幕模式
-  | 'tearBlur' // 泪水模糊
-  | 'imageFill'; // 图片填充字
-
-/** imageFill 的填充形状来源。 */
-export type FillShape =
-  | 'heart' // 爱心
-  | 'star' // 星星
-  | 'circle' // 圆形
-  | 'diamond' // 菱形
-  | 'image'; // 上传图片
+  | 'tearBlur'; // 泪水模糊
 
 /**
  * 特效渲染的「数值参数」。所有可在区间内随机的旋钮收在这里，渲染算法只读这份参数。
@@ -47,7 +38,7 @@ export interface EffectParams {
   maxSize: number;
   /** 随机模糊上限(px) */
   blur: number;
-  /** 内边距(px)：rain/barrage/tearBlur/imageFill 通用边距 */
+  /** 内边距(px)：rain/barrage/tearBlur 通用边距 */
   padding: number;
   /** 随机种子：相同种子 + 相同输入 = 相同结果 */
   seed: number;
@@ -61,13 +52,6 @@ export interface EffectParams {
   tearLineSpacing: number;
   /** tearBlur：模糊圆半径(px) */
   tearBlurRadius: number;
-
-  /** imageFill：填充方向 */
-  fillDirection: 'horizontal' | 'vertical';
-  /** imageFill：填充形状（内置形状或上传图片） */
-  fillShape: FillShape;
-  /** imageFill：上传图片明暗阈值(0-255)，低于阈值视为形状内部（仅 fillShape='image' 用） */
-  imageThreshold: number;
 }
 
 /**
@@ -100,8 +84,6 @@ export interface LayoutRecipe {
   style: RenderStyle;
   /** 后台决策出的背景选择（配色/图片，供测试器展示读数） */
   background: import('./catalog').Background;
-  /** imageFill 时后台决策的形状（供测试器展示读数） */
-  shape?: FillShape;
   /** 抽取来源：mock 阶段为 'mock'，后端接上后为 'model' */
   source: 'mock' | 'model';
 }
@@ -109,8 +91,10 @@ export interface LayoutRecipe {
 /** 结构抽取请求参数。 */
 export interface ExtractLayoutInput {
   text: string;
-  /** 可选：用户指定偏好的模式，抽取层可参考 */
+  /** 可选：锁定排版效果；不传则由内容推荐（随机档） */
   preferredMode?: EffectMode;
+  /** 可选：锁定配色 id；不传则由内容推荐（随机档） */
+  preferredPaletteId?: string;
   /** 可选：指定随机种子（用于"换一版"复现/变体）；不传则随机 */
   seed?: number;
 }
