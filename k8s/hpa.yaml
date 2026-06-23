@@ -5,7 +5,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: popop-tool
-  namespace: fast-projects
+  namespace: fast-project
   labels:
     app: popop-tool
 spec:

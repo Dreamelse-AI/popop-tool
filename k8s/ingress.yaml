@@ -1,5 +1,5 @@
 # ============================================================
-# VKE ALB Ingress（火山引擎应用型负载均衡）
+# 阿里云 ALB Ingress
 #
 # ⚠️ 本文件【已从 kustomization.yaml 移出】，不由应用 CI 管理。
 #   ALB Ingress 属基础设施，由集群侧手动维护，避免 CI apply 覆盖
@@ -11,15 +11,14 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: popop-tool
-  namespace: fast-projects
+  namespace: fast-project
   labels:
     app: popop-tool
   annotations:
-    ingress.vke.volcengine.com/loadbalancer-protocol: http
-    ingress.vke.volcengine.com/loadbalancer-backend-protocol: http
-    ingress.vke.volcengine.com/loadbalancer-port: "80"
-    ingress.vke.volcengine.com/loadbalancer-pass-through: "true"
-    ingress.vke.volcengine.com/loadbalancer-scheduler: wrr
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/backend-protocol: http
 spec:
   rules:
     - host: tool.popop.ai

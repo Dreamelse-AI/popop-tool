@@ -6,7 +6,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: popop-tool-config
-  namespace: fast-projects
+  namespace: fast-project
   labels:
     app: popop-tool
 data:

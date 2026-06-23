@@ -9,7 +9,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: fast-projects
+namespace: fast-project
 
 resources:
   - configmap.yaml
@@ -18,7 +18,7 @@ resources:
   - hpa.yaml
 
 images:
-  - name: repository-bebelike-i18n-ap-southeast-1.cr.bytepluses.com/bebelike-i18n-prod/popop-tool
+  - name: registry.ap-northeast-1.aliyuncs.com/fast-project/popop-tool
     newTag: latest
 
 labels:

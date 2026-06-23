@@ -7,7 +7,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: popop-tool
-  namespace: fast-projects
+  namespace: fast-project
   labels:
     app: popop-tool
 spec:
@@ -27,7 +27,7 @@ spec:
         app: popop-tool
     spec:
       imagePullSecrets:
-        - name: repository-bebelike-i18n-prod
+        - name: publicimagesecret
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -37,7 +37,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: popop-tool
-          image: repository-bebelike-i18n-ap-southeast-1.cr.bytepluses.com/bebelike-i18n-prod/popop-tool:latest
+          image: registry.ap-northeast-1.aliyuncs.com/fast-project/popop-tool:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
