@@ -11,8 +11,6 @@
  *          把联网/出图调用次数与成本压到最低。
  */
 
-import type { AspectRatio, Resolution } from './visualAsset';
-
 /** 九宫格固定 3×3。 */
 export const STICKER_GRID = 3;
 /** 一张九宫格切出的表情数量。 */
@@ -59,10 +57,6 @@ export interface StickerGenerateParams {
   prompt: string;
   /** 九宫格 9 格各自的情绪（按行优先顺序，长度应为 9） */
   emotions: StickerEmotion[];
-  /** 输出比例（九宫格用 1:1 最稳，保证每格近似方形） */
-  ratio: AspectRatio;
-  /** 输出分辨率档位 */
-  resolution: Resolution;
   /** 抠图模式 */
   matting: MattingMode;
   /** 色键抠图参数（matting=colorKey 时生效） */

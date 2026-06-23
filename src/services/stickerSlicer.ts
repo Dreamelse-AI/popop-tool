@@ -16,10 +16,14 @@ async function loadBitmap(src: string, signal?: AbortSignal): Promise<ImageBitma
 }
 
 /**
- * 把九宫格大图切成 9 张方图，按行优先（左→右、上→下）返回 data URL 数组。
+ * 把九宫格大图切成 9 张 1:1 正方形表情，按行优先（左→右、上→下）返回 data URL 数组。
+ *
+ * 几何：大图按 3×3 等分成 9 个格子（格子比例继承大图，通常是竖条），
+ * 再从每个格子里居中裁出边长 = min(格子宽, 格子高) 的正方形，保证单表情统一 1:1。
+ *
  * @param src 九宫格大图直链
  * @param signal 可选取消信号
- * @returns 9 个 PNG data URL
+ * @returns 9 个 1:1 PNG data URL
  */
 export async function sliceGrid(src: string, signal?: AbortSignal): Promise<string[]> {
   const bitmap = await loadBitmap(src, signal);
@@ -29,26 +33,31 @@ export async function sliceGrid(src: string, signal?: AbortSignal): Promise<stri
     const cellH = Math.floor(bitmap.height / STICKER_GRID);
     if (cellW <= 0 || cellH <= 0) throw new Error('大图尺寸异常，无法切分');
 
+    // 单表情统一裁成 1:1：边长取格子短边，在格子内居中裁
+    const side = Math.min(cellW, cellH);
+    const offsetX = Math.floor((cellW - side) / 2);
+    const offsetY = Math.floor((cellH - side) / 2);
+
     const canvas = document.createElement('canvas');
-    canvas.width = cellW;
-    canvas.height = cellH;
+    canvas.width = side;
+    canvas.height = side;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('无法创建画布上下文');
 
     const out: string[] = [];
     for (let row = 0; row < STICKER_GRID; row++) {
       for (let col = 0; col < STICKER_GRID; col++) {
-        ctx.clearRect(0, 0, cellW, cellH);
+        ctx.clearRect(0, 0, side, side);
         ctx.drawImage(
           bitmap,
-          col * cellW,
-          row * cellH,
-          cellW,
-          cellH,
+          col * cellW + offsetX,
+          row * cellH + offsetY,
+          side,
+          side,
           0,
           0,
-          cellW,
-          cellH,
+          side,
+          side,
         );
         out.push(canvas.toDataURL('image/png'));
       }

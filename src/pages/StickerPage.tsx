@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
-import type { AspectRatio, Resolution } from '@/types/visualAsset';
 import type { MattingMode } from '@/types/sticker';
 import { useStickerStore } from '@/features/sticker/store';
 import { PromptManager } from '@/features/sticker/PromptManager';
@@ -8,8 +7,6 @@ import { EmotionManager } from '@/features/sticker/EmotionManager';
 import { ReferenceUploader } from '@/features/sticker/ReferenceUploader';
 import { downloadImage } from '@/features/background/downloadImage';
 
-const RATIOS: AspectRatio[] = ['1:1', '3:4', '4:3', '9:16', '16:9'];
-const RESOLUTIONS: Resolution[] = ['1k', '2k', '4k'];
 const MATTING_OPTIONS: { id: MattingMode; label: string }[] = [
   { id: 'colorKey', label: '色键抠图（去背景）' },
   { id: 'none', label: '不抠图（保留背景）' },
@@ -25,8 +22,6 @@ export function StickerPage() {
   const {
     referenceImages,
     prompt,
-    ratio,
-    resolution,
     matting,
     status,
     errorMessage,
@@ -36,8 +31,6 @@ export function StickerPage() {
     removeReferenceImage,
     clearReferenceImages,
     setPrompt,
-    setRatio,
-    setResolution,
     setMatting,
     generate,
     cancel,
@@ -107,46 +100,9 @@ export function StickerPage() {
               )}
             </div>
             {/* [RATIO_RES] */}
-            <div className="flex flex-wrap items-end gap-6">
-              <div>
-                <div className="mb-1.5 text-sm font-semibold text-neutral-700">比例</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {RATIOS.map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setRatio(r)}
-                      className={
-                        r === ratio
-                          ? 'rounded-md border border-neutral-900 bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white'
-                          : 'rounded-md border border-neutral-200 bg-white px-2.5 py-1 text-xs text-neutral-600 hover:border-neutral-400'
-                      }
-                    >
-                      {r}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="mb-1.5 text-sm font-semibold text-neutral-700">分辨率</div>
-                <div className="flex gap-1.5">
-                  {RESOLUTIONS.map((res) => (
-                    <button
-                      key={res}
-                      type="button"
-                      onClick={() => setResolution(res)}
-                      className={
-                        res === resolution
-                          ? 'rounded-md border border-neutral-900 bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white'
-                          : 'rounded-md border border-neutral-200 bg-white px-2.5 py-1 text-xs text-neutral-600 hover:border-neutral-400'
-                      }
-                    >
-                      {res.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <p className="text-xs text-neutral-400">
+              出图规格固定：九宫格大图 1:1 · 2K（3×3 均分），单个表情居中裁成 1:1。
+            </p>
           </div>
           {/* [ACTIONS] */}
           <div className="flex gap-3">
