@@ -1,5 +1,6 @@
 import type { EffectParams } from '@/types/layout';
 import { clamp, mulberry32, randomBetween, type RenderContext } from './shared';
+import { weightForSize } from '../typography';
 
 /** 取整段文字按换行拆成多段（强制分段），去空行。 */
 function paragraphs(text: string): string[] {
@@ -63,7 +64,8 @@ export function drawTearBlur(rc: RenderContext, text: string, params: EffectPara
   const letterSpacing = params.tearLetterSpacing * scale;
   const lineGap = fontSize * (params.tearLineSpacing / 100);
   const blurRadius = params.tearBlurRadius * scale;
-  const font = `${rc.fontWeight} ${fontSize}px ${rc.fontFamily}`;
+  const weight = weightForSize(fontSize / Math.max(scale, 0.0001), rc.fontKind);
+  const font = `${weight} ${fontSize}px ${rc.fontFamily}`;
   const maxWidth = width - pad * 2;
 
   const measure = (s: string): number => {

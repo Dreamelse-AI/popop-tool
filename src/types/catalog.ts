@@ -23,7 +23,9 @@ export type NumericParamKey =
   | 'spread'
   | 'tearLetterSpacing'
   | 'tearLineSpacing'
-  | 'tearBlurRadius';
+  | 'tearBlurRadius'
+  | 'titleSize'
+  | 'listLineSpacing';
 
 /**
  * 单个参数的规格：自描述（键 + 标签 + 单位 + 区间 + 步进）。
@@ -71,6 +73,8 @@ export interface PaletteEntry {
   bgColor: string;
   /** 文字主色（已与 bgColor 校验过对比度） */
   fontColor: string;
+  /** 字体气质倾向：serif（抒情/杂志感）/ sans（现代/科技感）。渲染时据此选字体栈 */
+  font: import('@/features/text-layout/typography').FontKind;
   /** 可选强调色 */
   accent?: string;
 }
