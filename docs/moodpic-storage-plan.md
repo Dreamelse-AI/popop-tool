@@ -117,13 +117,33 @@
 
 ## 6. 压缩（待补）
 
-压缩走飞书文档约定的**后端压缩接口**。该文档当前抓取受限（需登录），待通过飞书 MCP 读取后补全：
+## 6. 压缩（已查证：aigc `/api/v1/image/compress`）
 
-- [ ] 压缩接口路径 / 入参 / 出参
-- [ ] 目标格式（webp / jpeg）、质量、长边上限
-- [ ] 压缩发生在「上传 OSS 之前」还是「OSS 触发器」
+压缩走 aigc 服务的图片压缩接口。该接口**仅供 arca 后端调用，不面向前端、不鉴权**，
+因此前端不能直连，必须由 arca 转发（与图库接口同样走 arca）。
 
-补全后回填本节并接入 §3 链路。
+来源：飞书「aigc-i18n 接口文档」§6.2（已通过 lark-cli 读取核对）。
+
+- 方法：`POST /api/v1/image/compress`（JSON）
+- 入参（`image_url` 与 `image_base64` 二选一）：
+  - `image_url` string — 图片公网 URL
+  - `image_base64` string — base64 数据
+  - `quality` integer — 压缩质量 1-100，默认 100
+  - `format` string — 输出格式，默认 `webp`
+  - `max_size` integer — 最大文件字节数，默认 4MB（4194304）
+- 返回：`{ code, msg, data: { image_url } }`
+  - `image_url` 是**压缩后上传 TOS 的永久 URL**（非临时直链，不会 24h 过期）
+
+**重要影响：**
+- 压缩接口落 **TOS（火山引擎）**，不是本方案早先设想的阿里云 OSS。说明后端图片基建当前是 TOS。
+- 这一步同时解决了「永久化」：apimart 出图是 ~24h 临时直链，经 `compress` 后得到的是 TOS 永久 URL。
+- 因此存储链路可简化为：**apimart 临时直链 → arca 转发 compress → 拿 TOS 永久 URL → 存图库元数据**。
+  不再需要前端拿 OSS 临时凭证直传（除非后端明确要求走 OSS 而非 TOS）。
+
+**待与后端确认：**
+- [ ] arca 是否已有（或愿意新增）转发到 aigc `/api/v1/image/compress` 的对外接口？路径/字段？
+- [ ] 最终落 TOS 还是迁 OSS（`bucket-popop-i18n-prod` 的 `moodpic/`）？两者读图签名方式不同。
+- [ ] compress 接口接受 `image_url`，apimart 直链是否公网可达（能被 aigc 拉取）？
 
 ---
 
@@ -149,6 +169,35 @@
 
 ---
 
-## 9. 给后端的一句话
+## 9. 给后端的问题清单（待确认，请逐条回复）
 
-> popop-tool 需要一组「通用图库」接口（保存 / 分页列表 / 批量删除）+ 把 `/file/tos_credential` 迁成返回阿里云 OSS（`bucket-popop-i18n-prod`，限 `moodpic/` 前缀）的临时 STS 凭证；列表返回的 url 请给 CDN 签名直链。字段命名你们定，定稿后更新 `arca.api`，我这边按契约对齐。
+> 背景：popop-tool 是独立工具站，需要把视觉资产引擎生成的图做**压缩 + 永久存储 + 图库（列表/批量删除）**，
+> 提示词与配置也要永久存。已读 aigc「aigc-i18n 接口文档」§6.2 压缩接口与 arca `arca.api` 现有契约。
+
+**Q1 压缩接口的对外通道**
+aigc `/api/v1/image/compress` 是内部接口（仅 arca 可调）。arca 是否已有/能否新增一个对外接口转发它？
+前端要传 `image_url`(apimart 临时直链) → 拿回压缩后的永久 URL。请给路径与字段。
+
+**Q2 最终落 TOS 还是 OSS**
+compress 文档写的是落 **TOS**；但产品侧给的是阿里云 **OSS**（`bucket-popop-i18n-prod` 的 `moodpic/`）。
+最终以哪个为准？这决定读图签名方式（TOS vs OSS/CDN）。
+
+**Q3 通用图库接口**
+arca 现有契约没有「保存任意生成图+提示词、分页列表、批量删除」的通用接口
+（`get/del_generation_temp_asset` 强绑角色场景，emoji/post 都不通用）。
+能否新增本文件 §4 描述的三个接口（save / list / batch_delete）？字段命名你们定，定稿后更新 `arca.api`。
+
+**Q4 apimart 直链可达性**
+compress 接受 `image_url`，apimart 出图直链是否能被 aigc 服务端公网拉取？
+若不可达，则前端需改传 `image_base64`（compress 也支持）。
+
+**Q5 鉴权**
+工具站走 arca 的话，沿用 JWT（`Authorization: Bearer`）即可？工具站的用户身份/token 怎么发？
+
+---
+
+## 10. 给后端的一句话（旧版，待 Q1-Q5 确认后作废或更新）
+
+> popop-tool 需要：①一个能转发 aigc `/api/v1/image/compress` 的 arca 对外接口；
+> ②一组通用图库接口（保存 / 分页列表 / 批量删除）；③明确最终落 TOS 还是 OSS。
+> 字段命名你们定，定稿后更新 `arca.api`，前端按契约对齐。
