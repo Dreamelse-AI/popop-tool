@@ -11,7 +11,7 @@ import { ResultPanel } from '@/components/ResultPanel';
 import { IconDownload } from '@/components/icons';
 
 const MATTING_OPTIONS: { id: MattingMode; label: string }[] = [
-  { id: 'colorKey', label: '色键抠图（去背景）' },
+  { id: 'colorKey', label: '白描边贴纸抠图' },
   { id: 'none', label: '不抠图（保留背景）' },
 ];
 
@@ -87,7 +87,7 @@ export function StickerPage() {
               </div>
               {matting === 'colorKey' && (
                 <p className="mt-1.5 text-xs text-ink-3">
-                  会要求模型出纯绿背景，再按颜色阈值抠掉。发丝等细节可能抠不净，效果不满意可改用「不抠图」。
+                  会要求模型把角色画成带白色粗描边的贴纸、纯黑背景，再从四边去掉黑底。白描边能保住黑发等与背景同色的部分，比纯色键更干净。
                 </p>
               )}
             </div>

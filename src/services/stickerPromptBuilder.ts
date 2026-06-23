@@ -14,6 +14,7 @@ function describeBg(color: { r: number; g: number; b: number }): string {
   if (r > 200 && g < 80 && b < 80) return 'pure red';
   if (b > 200 && r < 80 && g < 80) return 'pure blue';
   if (r > 230 && g > 230 && b > 230) return 'pure white';
+  if (r < 40 && g < 40 && b < 40) return 'pure solid black (#000000)';
   return `solid background color rgb(${r}, ${g}, ${b})`;
 }
 
@@ -50,7 +51,10 @@ export function buildStickerPrompt(
 
   if (matting === 'colorKey') {
     lines.push(
-      `Use a flat ${describeBg(colorKey.bgColor)} background filling every cell uniformly, no gradients, no shadows on the background, so the background can be removed by chroma keying.`,
+      `Render each character as a die-cut sticker: add a thick, solid, uniform white outline (border / stroke) tightly wrapping the whole character silhouette, like a printed sticker edge.`,
+    );
+    lines.push(
+      `Place everything on a flat ${describeBg(colorKey.bgColor)} background filling every cell uniformly, no gradients, no shadows, no glow, so the background can be cleanly removed. The white sticker outline must clearly separate the character from the background even where the character's own colors are dark.`,
     );
   }
 
