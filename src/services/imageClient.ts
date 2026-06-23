@@ -29,6 +29,11 @@ const APIMART_MODEL = 'gpt-image-2';
 const POLL_TIMEOUT_MS = 600_000;
 const POLL_START_INTERVAL_MS = 3_000;
 const POLL_MAX_INTERVAL_MS = 10_000;
+/**
+ * 查询接口连续网关错误（502/503/504）容忍上限。
+ * 偶发抖动会自动重试；连续超过此次数视为上游持续不可用，快速失败而非干等到超时。
+ */
+const MAX_CONSECUTIVE_GATEWAY_ERRORS = 8;
 
 export class ImageGenError extends Error {
   constructor(
@@ -166,6 +171,9 @@ async function createTask(
 async function pollTask(taskId: string, signal?: AbortSignal): Promise<string> {
   const start = Date.now();
   let interval = POLL_START_INTERVAL_MS;
+  // 连续网关错误（含网络异常与 5xx）计数；任何一次成功响应都会清零
+  let consecutiveGatewayErrors = 0;
+  let lastGatewayStatus = 0;
 
   while (Date.now() - start < POLL_TIMEOUT_MS) {
     await sleep(interval, signal);
@@ -175,10 +183,29 @@ async function pollTask(taskId: string, signal?: AbortSignal): Promise<string> {
       res = await fetch(`${APIMART_BASE}/v1/tasks/${taskId}`, { signal });
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') throw e;
+      // 网络层失败也计入连续错误，避免上游彻底不可达时干等到超时
+      if (++consecutiveGatewayErrors >= MAX_CONSECUTIVE_GATEWAY_ERRORS) {
+        throw new ImageGenError('查询生成结果持续失败，可能是上游服务繁忙，请稍后重试');
+      }
       continue;
     }
-    if (!res.ok) continue;
 
+    if (!res.ok) {
+      // 502/503/504 是上游网关繁忙，可重试；连续过多则快速失败
+      if (res.status >= 500) {
+        lastGatewayStatus = res.status;
+        if (++consecutiveGatewayErrors >= MAX_CONSECUTIVE_GATEWAY_ERRORS) {
+          throw new ImageGenError(
+            `上游服务暂时不可用（连续 ${res.status}），请稍后重试`,
+            lastGatewayStatus,
+          );
+        }
+      }
+      // 4xx 等其它非 2xx 不计入网关错误，继续轮询（任务可能仍在排队）
+      continue;
+    }
+
+    consecutiveGatewayErrors = 0;
     const json = (await res.json()) as TaskStatusResponse;
     const status = json.data?.status;
 
