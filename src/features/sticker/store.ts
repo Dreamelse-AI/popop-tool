@@ -7,10 +7,6 @@
 
 import { create } from 'zustand';
 import type {
-  AspectRatio,
-  Resolution,
-} from '@/types/visualAsset';
-import type {
   ColorKeyOptions,
   MattingMode,
   StickerItem,
@@ -23,13 +19,20 @@ import { sliceGrid } from '@/services/stickerSlicer';
 import { removeBackgroundByColorKey, DEFAULT_COLOR_KEY } from '@/services/stickerMatting';
 import { useEmotionStore } from './emotionStore';
 
+/**
+ * 固定出图规格（不再让用户选，避免「全图比例 vs 单表情比例」语义混淆）：
+ *   - 九宫格大图统一 1:1：3×3 均分后每格天然就是 1:1，裁单表情几乎零损失，
+ *     且 1:1 是 gpt-image-2 最稳的比例（异化比例模型遵循度差、易构图崩）
+ *   - 单个表情统一从每格居中裁成 1:1
+ */
+const GRID_RATIO = '1:1';
+const GRID_RESOLUTION = '2k';
+
 interface StickerState {
   /** 人物参考图（base64 data URI） */
   referenceImages: string[];
   /** 当前提示词正文 */
   prompt: string;
-  ratio: AspectRatio;
-  resolution: Resolution;
   matting: MattingMode;
   colorKey: ColorKeyOptions;
 
@@ -46,8 +49,6 @@ interface StickerState {
   removeReferenceImage: (index: number) => void;
   clearReferenceImages: () => void;
   setPrompt: (p: string) => void;
-  setRatio: (r: AspectRatio) => void;
-  setResolution: (r: Resolution) => void;
   setMatting: (m: MattingMode) => void;
   setColorKey: (patch: Partial<ColorKeyOptions>) => void;
   /** 跑完整链路：图生图 → 切图 → 抠图 */
@@ -61,8 +62,6 @@ const MAX_REFERENCE_IMAGES = 16;
 export const useStickerStore = create<StickerState>((set, get) => ({
   referenceImages: [],
   prompt: '',
-  ratio: '1:1',
-  resolution: '2k',
   matting: 'colorKey',
   colorKey: { ...DEFAULT_COLOR_KEY },
 
@@ -83,13 +82,11 @@ export const useStickerStore = create<StickerState>((set, get) => ({
   clearReferenceImages: () => set({ referenceImages: [] }),
 
   setPrompt: (prompt) => set({ prompt }),
-  setRatio: (ratio) => set({ ratio }),
-  setResolution: (resolution) => set({ resolution }),
   setMatting: (matting) => set({ matting }),
   setColorKey: (patch) => set((s) => ({ colorKey: { ...s.colorKey, ...patch } })),
 
   generate: async () => {
-    const { referenceImages, prompt, ratio, resolution, matting, colorKey } = get();
+    const { referenceImages, prompt, matting, colorKey } = get();
     if (referenceImages.length === 0) {
       set({ status: 'error', errorMessage: '请先上传至少一张人物形象图' });
       return;
@@ -126,7 +123,7 @@ export const useStickerStore = create<StickerState>((set, get) => ({
       const image = await generateImageByReference(
         fullPrompt,
         referenceImages,
-        { size: ratio, resolution },
+        { size: GRID_RATIO, resolution: GRID_RESOLUTION },
         controller.signal,
       );
       if (get()._abort !== controller) return;

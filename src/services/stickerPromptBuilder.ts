@@ -31,9 +31,10 @@ export function buildStickerPrompt(
   colorKey: ColorKeyOptions,
 ): string {
   const lines = [
-    'Create a single image containing a 3x3 grid (9 cells) of expression stickers of the SAME character.',
+    'Create a single square (1:1) image containing a 3x3 grid (9 cells) of expression stickers of the SAME character.',
     'Keep the character identity, outfit, and art style strictly consistent across all 9 cells, matching the provided reference image.',
-    'Arrange the cells neatly in 3 rows and 3 columns with equal cell sizes and clear separation, no overlap between cells.',
+    'Divide the canvas evenly into 3 rows and 3 columns of equal square cells, with clear separation and no overlap between cells.',
+    'In every cell, place the character centered with generous margin / padding around it, so each cell can be safely center-cropped to a 1:1 square without cutting off the character.',
   ];
 
   if (emotions.length > 0) {
