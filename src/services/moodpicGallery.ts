@@ -18,9 +18,30 @@ import type {
 /** 后端图库接口是否就绪。后端联调时置 false。 */
 const USE_MOCK = true;
 
-// [MOCK_STORE]
-/** mock 内存库（仅开发态占位，刷新即清空，不做持久化）。 */
-const mockDb: MoodPicAsset[] = [];
+// [LOCAL_STORE]
+/**
+ * 过渡期本地图库：持久化到 localStorage，刷新不丢。
+ * 注意：仅本机本浏览器，不跨设备；apimart 图直链约 24h 过期，过期后图打不开。
+ * 后端 arca 图库接口就绪后置 USE_MOCK=false，切真实 OSS 永久存储。
+ */
+const LOCAL_KEY = 'popop-moodpic-gallery';
+
+function readLocal(): MoodPicAsset[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_KEY);
+    return raw ? (JSON.parse(raw) as MoodPicAsset[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocal(items: MoodPicAsset[]): void {
+  try {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(items));
+  } catch {
+    // 忽略写入失败（如配额满），不阻断主流程
+  }
+}
 
 /** 列出图库（分页）。 */
 export async function listMoodPics(
@@ -28,10 +49,11 @@ export async function listMoodPics(
   pageSize: number,
 ): Promise<MoodPicListResult> {
   if (USE_MOCK) {
+    const all = readLocal();
     const start = (page - 1) * pageSize;
     return {
-      items: mockDb.slice(start, start + pageSize),
-      total: mockDb.length,
+      items: all.slice(start, start + pageSize),
+      total: all.length,
     };
   }
   return listViaArca(page, pageSize);
@@ -40,10 +62,8 @@ export async function listMoodPics(
 /** 批量删除（删 OSS 对象 + 库记录由后端完成）。 */
 export async function batchDeleteMoodPics(assetIds: string[]): Promise<void> {
   if (USE_MOCK) {
-    for (const id of assetIds) {
-      const idx = mockDb.findIndex((a) => a.assetId === id);
-      if (idx >= 0) mockDb.splice(idx, 1);
-    }
+    const idSet = new Set(assetIds);
+    writeLocal(readLocal().filter((a) => !idSet.has(a.assetId)));
     return;
   }
   return batchDeleteViaArca(assetIds);
@@ -53,7 +73,7 @@ export async function batchDeleteMoodPics(assetIds: string[]): Promise<void> {
 export async function saveMoodPic(input: SaveMoodPicInput): Promise<MoodPicAsset> {
   if (USE_MOCK) {
     const asset: MoodPicAsset = {
-      assetId: `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      assetId: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       url: input.url,
       prompt: input.prompt,
       config: input.config,
@@ -61,7 +81,7 @@ export async function saveMoodPic(input: SaveMoodPicInput): Promise<MoodPicAsset
       resolution: input.resolution,
       createdAt: new Date().toISOString(),
     };
-    mockDb.unshift(asset);
+    writeLocal([asset, ...readLocal()]);
     return asset;
   }
   return saveViaArca(input);

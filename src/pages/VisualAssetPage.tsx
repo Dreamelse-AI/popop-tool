@@ -32,6 +32,8 @@ export function VisualAssetPage() {
     setResolution,
     generate,
     retryItem,
+    saveItem,
+    saveAllDone,
     cancel,
   } = useVisualAssetStore();
 
@@ -216,13 +218,22 @@ export function VisualAssetPage() {
               结果 {items.length > 0 && `（${doneItems.length}/${items.length}）`}
             </div>
             {doneItems.length > 0 && (
-              <button
-                type="button"
-                onClick={handleDownloadAll}
-                className="text-xs text-neutral-500 hover:text-neutral-900"
-              >
-                批量下载（{doneItems.length}）
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void saveAllDone()}
+                  className="text-xs text-neutral-500 hover:text-neutral-900"
+                >
+                  全部存入图库
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadAll}
+                  className="text-xs text-neutral-500 hover:text-neutral-900"
+                >
+                  批量下载（{doneItems.length}）
+                </button>
+              </div>
             )}
           </div>
           {items.length === 0 ? (
@@ -269,13 +280,23 @@ export function VisualAssetPage() {
                       {item.config.emotion} · {item.config.type}
                     </button>
                     {item.status === 'done' && item.url && (
-                      <button
-                        type="button"
-                        onClick={() => handleDownload(item.url!, item.id)}
-                        className="shrink-0 text-xs text-neutral-400 hover:text-neutral-900"
-                      >
-                        下载
-                      </button>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void saveItem(item.id)}
+                          disabled={!!item.savedAssetId}
+                          className="text-xs text-neutral-400 hover:text-neutral-900 disabled:text-emerald-500 disabled:hover:text-emerald-500"
+                        >
+                          {item.savedAssetId ? '已存' : '存图库'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDownload(item.url!, item.id)}
+                          className="text-xs text-neutral-400 hover:text-neutral-900"
+                        >
+                          下载
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

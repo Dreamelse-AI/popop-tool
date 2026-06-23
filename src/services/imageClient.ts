@@ -79,18 +79,43 @@ export interface ImageGenOptions {
   resolution: string;
 }
 
+/**
+ * 比例 × 分辨率 → 精确像素尺寸映射（来自 apimart gpt-image-2 文档表格）。
+ *
+ * 背景：gpt-image-2 对纯比例字符串（如 "9:16"）的遵循不稳定，出图比例会漂。
+ * 文档支持直接传像素尺寸（"传 size 则强制按指定尺寸出图"），传像素更可靠。
+ * 因此前端把 ratio+resolution 映射成像素再传，锁死比例。
+ */
+const PIXEL_SIZE_MAP: Record<string, Record<string, string>> = {
+  '1:1': { '1k': '1024x1024', '2k': '2048x2048', '4k': '2880x2880' },
+  '3:2': { '1k': '1536x1024', '2k': '2048x1360', '4k': '3520x2336' },
+  '2:3': { '1k': '1024x1536', '2k': '1360x2048', '4k': '2336x3520' },
+  '4:3': { '1k': '1024x768', '2k': '2048x1536', '4k': '3312x2480' },
+  '3:4': { '1k': '768x1024', '2k': '1536x2048', '4k': '2480x3312' },
+  '16:9': { '1k': '1536x864', '2k': '2048x1152', '4k': '3840x2160' },
+  '9:16': { '1k': '864x1536', '2k': '1152x2048', '4k': '2160x3840' },
+};
+
+/** 把 ratio+resolution 解析为传给 apimart 的 size 值（优先精确像素，回退原比例）。 */
+function resolveSize(ratio: string, resolution: string): string {
+  return PIXEL_SIZE_MAP[ratio]?.[resolution] ?? ratio;
+}
+
 /** 提交生成任务（直接给定 prompt），返回 task_id。 */
 async function createTaskByPrompt(
   prompt: string,
   opts: ImageGenOptions,
   signal?: AbortSignal,
 ): Promise<string> {
+  const size = resolveSize(opts.size, opts.resolution);
+  const isPixelSize = /^\d+x\d+$/.test(size);
   const body: GenerateImageRequest = {
     model: APIMART_MODEL,
     prompt,
     n: 1,
-    size: opts.size as GenerateImageRequest['size'],
-    resolution: opts.resolution as GenerateImageRequest['resolution'],
+    size: size as GenerateImageRequest['size'],
+    // 传精确像素时 resolution 已隐含在像素里，再传会与像素冲突，故仅在回退比例时传
+    ...(isPixelSize ? {} : { resolution: opts.resolution as GenerateImageRequest['resolution'] }),
   };
 
   let res: Response;

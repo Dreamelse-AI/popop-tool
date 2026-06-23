@@ -8,6 +8,7 @@ import type {
 import { generateConfigs } from '@/services/visualAssetEngine';
 import { expandToPrompt } from '@/services/promptExpander';
 import { generateImageByPrompt, ImageGenError } from '@/services/imageClient';
+import { saveMoodPic } from '@/services/moodpicGallery';
 import { useCustomStyleStore } from './customStyleStore';
 
 /** 批量生成的并发上限（小并发，避免打爆 apimart）。 */
@@ -38,6 +39,10 @@ interface VisualAssetState {
   generate: () => Promise<void>;
   /** 重试单条结果项（重新扩写并出图，配置不变） */
   retryItem: (id: string) => Promise<void>;
+  /** 把单条已完成结果存入图库 */
+  saveItem: (id: string) => Promise<void>;
+  /** 把所有已完成且未存过的结果存入图库 */
+  saveAllDone: () => Promise<void>;
   cancel: () => void;
   reset: () => void;
 }
@@ -119,7 +124,13 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
       prompt: '',
       status: 'pending',
     }));
-    set({ status: 'generating', errorMessage: null, items, _abort: controller });
+    // 累加在已有结果之前，不顶掉上一批
+    set((s) => ({
+      status: 'generating',
+      errorMessage: null,
+      items: [...items, ...s.items],
+      _abort: controller,
+    }));
 
     /** 更新单条结果项。 */
     const update = (id: string, patch: Partial<AssetResultItem>) => {
@@ -190,6 +201,29 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
       set((s) => ({
         items: s.items.map((it) => (it.id === id ? { ...it, status: 'error', error: msg } : it)),
       }));
+    }
+  },
+  // [SAVE]
+  saveItem: async (id) => {
+    const item = get().items.find((it) => it.id === id);
+    if (!item || item.status !== 'done' || !item.url || item.savedAssetId) return;
+    const asset = await saveMoodPic({
+      url: item.url,
+      objectKey: '',
+      prompt: item.prompt,
+      config: item.config,
+      ratio: get().ratio,
+      resolution: get().resolution,
+    });
+    set((s) => ({
+      items: s.items.map((it) => (it.id === id ? { ...it, savedAssetId: asset.assetId } : it)),
+    }));
+  },
+
+  saveAllDone: async () => {
+    const targets = get().items.filter((it) => it.status === 'done' && it.url && !it.savedAssetId);
+    for (const it of targets) {
+      await get().saveItem(it.id);
     }
   },
   // [CANCEL]

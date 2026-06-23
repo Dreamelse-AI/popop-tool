@@ -102,4 +102,6 @@ export interface AssetResultItem {
   url?: string;
   /** 失败原因 */
   error?: string;
+  /** 已存入图库后的资产 id（存过则有值，用于避免重复存 + UI 标记） */
+  savedAssetId?: string;
 }
