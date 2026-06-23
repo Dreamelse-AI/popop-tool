@@ -106,10 +106,12 @@ async function createTaskByPrompt(
   prompt: string,
   opts: ImageGenOptions,
   signal?: AbortSignal,
+  /** 可选参考图（base64 data URI 或公网 URL），传入则走图生图模式 */
+  imageUrls?: string[],
 ): Promise<string> {
   const size = resolveSize(opts.size, opts.resolution);
   const isPixelSize = /^\d+x\d+$/.test(size);
-  const body: GenerateImageRequest = {
+  const body: GenerateImageRequest & { image_urls?: string[] } = {
     model: APIMART_MODEL,
     prompt,
     n: 1,
@@ -117,6 +119,9 @@ async function createTaskByPrompt(
     // 传精确像素时 resolution 已隐含在像素里，再传会与像素冲突，故仅在回退比例时传
     ...(isPixelSize ? {} : { resolution: opts.resolution as GenerateImageRequest['resolution'] }),
   };
+  if (imageUrls && imageUrls.length > 0) {
+    body.image_urls = imageUrls;
+  }
 
   let res: Response;
   try {
@@ -236,6 +241,24 @@ export async function generateImageByPrompt(
   signal?: AbortSignal,
 ): Promise<GeneratedImage> {
   const taskId = await createTaskByPrompt(prompt, opts, signal);
+  const url = await pollTask(taskId, signal);
+  return { url };
+}
+
+/**
+ * 图生图：按 prompt + 参考图生成一张图（供表情包九宫格等复用）。
+ * @param prompt 完整 image prompt
+ * @param imageUrls 参考图（base64 data URI 或公网 URL），最多 16 张
+ * @param opts 输出规格（size 比例 / resolution 档位）
+ * @param signal 可选取消信号
+ */
+export async function generateImageByReference(
+  prompt: string,
+  imageUrls: string[],
+  opts: ImageGenOptions,
+  signal?: AbortSignal,
+): Promise<GeneratedImage> {
+  const taskId = await createTaskByPrompt(prompt, opts, signal, imageUrls);
   const url = await pollTask(taskId, signal);
   return { url };
 }
