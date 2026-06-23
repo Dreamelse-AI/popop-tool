@@ -78,10 +78,10 @@ export interface GenerateImageRequest {
   prompt: string;
   /** 生成张数，固定 1 */
   n: number;
-  /** 比例，如 9:16 */
-  size: AspectRatio;
-  /** 分辨率档位 1k/2k/4k */
-  resolution: Resolution;
+  /** 比例（如 9:16）或精确像素（如 1152x2048） */
+  size: AspectRatio | string;
+  /** 分辨率档位 1k/2k/4k；传精确像素时省略 */
+  resolution?: Resolution;
 }
 
 /** 图像生成结果。apimart 任务完成后从 result.images[0].url[0] 取直链。 */

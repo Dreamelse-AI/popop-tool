@@ -54,7 +54,9 @@ export type TriStateSelection = string[];
 /** 工具的整体选择状态。 */
 export interface VisualAssetSelection {
   emotion: TriStateSelection;
+  subject: TriStateSelection;
   type: TriStateSelection;
+  style: TriStateSelection;
   /** DNA 各字段的三态选择，key 为 DnaField.key */
   dna: Record<string, TriStateSelection>;
 }
@@ -71,8 +73,10 @@ export type Resolution = '1k' | '2k' | '4k';
  */
 export interface AssetConfig {
   emotion: string;
-  subject: 'None';
+  /** 主体 option id（'none' 表示无明确主体） */
+  subject: string;
   type: AssetType;
+  /** 风格 pack 的 option id */
   style: string;
   dna: Record<string, string>;
 }
@@ -98,4 +102,6 @@ export interface AssetResultItem {
   url?: string;
   /** 失败原因 */
   error?: string;
+  /** 已存入图库后的资产 id（存过则有值，用于避免重复存 + UI 标记） */
+  savedAssetId?: string;
 }

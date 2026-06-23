@@ -33,6 +33,14 @@ const TOOLS: ToolEntry[] = [
     path: '/tools/visual-asset',
     status: 'available',
   },
+  {
+    id: 'sticker',
+    name: '表情包生成器',
+    description:
+      '上传人物形象，一次出图生成 3×3 九宫格表情，自动切成 9 张并去背景。调用最少、成本最低。',
+    path: '/tools/sticker',
+    status: 'available',
+  },
 ];
 
 export function HomePage() {

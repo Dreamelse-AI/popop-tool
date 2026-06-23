@@ -1,13 +1,16 @@
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
 import type { AspectRatio, Resolution, AssetType } from '@/types/visualAsset';
 import {
   EMOTION_OPTIONS,
+  SUBJECT_OPTIONS,
   TYPE_OPTIONS,
   DNA_SCHEMAS,
   ENABLED_TYPES,
 } from '@/data/visualAssetCatalog';
 import { useVisualAssetStore } from '@/features/visual-asset/store';
 import { ChipGroup } from '@/features/visual-asset/ChipGroup';
+import { StyleManager } from '@/features/visual-asset/StyleManager';
 import { downloadImage } from '@/features/background/downloadImage';
 
 const RATIOS: AspectRatio[] = ['9:16', '3:4', '2:3', '1:1', '3:2', '4:3', '16:9'];
@@ -28,21 +31,37 @@ export function VisualAssetPage() {
     setRatio,
     setResolution,
     generate,
+    retryItem,
+    saveItem,
+    saveAllDone,
     cancel,
   } = useVisualAssetStore();
 
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
   const generating = status === 'generating';
+  const doneItems = items.filter((i) => i.status === 'done' && i.url);
 
   // 当前 type：用户选了就用第一个，否则默认第一个已启用 type（决定 DNA 展开哪套）
   const activeType: AssetType = (selection.type[0] as AssetType) ?? ENABLED_TYPES[0];
   const schema = DNA_SCHEMAS[activeType];
 
-  // 仅展示已启用的 type 选项（第一版只 Abstract）
+  // 仅展示已启用的 type 选项
   const typeOptions = TYPE_OPTIONS.filter((t) => ENABLED_TYPES.includes(t.id as AssetType));
 
   const handleDownload = (url: string, id: string) => {
     void downloadImage(url, `asset-${id}.png`);
   };
+
+  const handleDownloadAll = () => {
+    doneItems.forEach((it, i) => {
+      // 稍微错开，避免浏览器拦截批量下载
+      setTimeout(() => downloadImage(it.url!, `asset-${it.id}.png`), i * 300);
+    });
+  };
+
+  const detailItem = detailId ? items.find((i) => i.id === detailId) : null;
 
   return (
     <div className="min-h-full bg-neutral-100">
@@ -50,10 +69,20 @@ export function VisualAssetPage() {
         <Link to="/" className="text-sm text-neutral-500 hover:text-neutral-900">
           ← 返回工具站
         </Link>
-        <h1 className="mt-1 text-xl font-bold text-neutral-900">视觉资产生产引擎</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Emotion × Type × DNA 三态组合（锁定 / 多选随机 / 不选全随机）→ 批量生成视觉资产
-        </p>
+        <div className="mt-1 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-neutral-900">视觉资产生产引擎</h1>
+            <p className="mt-1 text-sm text-neutral-500">
+              Emotion × Type × DNA 三态组合（锁定 / 多选随机 / 不选全随机）→ 批量生成视觉资产
+            </p>
+          </div>
+          <Link
+            to="/tools/visual-asset/gallery"
+            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-600 hover:border-neutral-500"
+          >
+            图库
+          </Link>
+        </div>
       </header>
       <main className="mx-auto grid max-w-6xl grid-cols-1 gap-8 p-8 lg:grid-cols-2">
         <section className="flex flex-col gap-5">
@@ -64,6 +93,14 @@ export function VisualAssetPage() {
             selected={selection.emotion}
             onToggle={(id) => toggle('emotion', id)}
             onClear={() => clearDimension('emotion')}
+          />
+
+          <ChipGroup
+            title="Subject 主体"
+            options={SUBJECT_OPTIONS}
+            selected={selection.subject}
+            onToggle={(id) => toggle('subject', id)}
+            onClear={() => clearDimension('subject')}
           />
 
           <ChipGroup
@@ -93,6 +130,12 @@ export function VisualAssetPage() {
             </div>
           </div>
           {/* [LEFT2] */}
+
+          <StyleManager
+            selected={selection.style}
+            onToggle={(id) => toggle('style', id)}
+            onClear={() => clearDimension('style')}
+          />
           <div className="flex flex-wrap items-end gap-6">
             <div>
               <div className="mb-1.5 text-sm font-semibold text-neutral-700">数量</div>
@@ -170,8 +213,28 @@ export function VisualAssetPage() {
         </section>
         <section className="flex flex-col gap-4">
           {/* [RIGHT] */}
-          <div className="text-sm font-semibold text-neutral-700">
-            结果 {items.length > 0 && `（${items.filter((i) => i.status === 'done').length}/${items.length}）`}
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold text-neutral-700">
+              结果 {items.length > 0 && `（${doneItems.length}/${items.length}）`}
+            </div>
+            {doneItems.length > 0 && (
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void saveAllDone()}
+                  className="text-xs text-neutral-500 hover:text-neutral-900"
+                >
+                  全部存入图库
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadAll}
+                  className="text-xs text-neutral-500 hover:text-neutral-900"
+                >
+                  批量下载（{doneItems.length}）
+                </button>
+              </div>
+            )}
           </div>
           {items.length === 0 ? (
             <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-white px-6 text-center text-sm text-neutral-400">
@@ -189,26 +252,51 @@ export function VisualAssetPage() {
                       <img
                         src={item.url}
                         alt={item.config.emotion}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full cursor-zoom-in object-cover"
+                        onClick={() => setLightboxUrl(item.url!)}
                       />
                     ) : item.status === 'error' ? (
-                      <span className="px-2 text-center text-xs text-red-500">{item.error}</span>
+                      <div className="flex flex-col items-center gap-2 px-2 text-center">
+                        <span className="text-xs text-red-500">{item.error}</span>
+                        <button
+                          type="button"
+                          onClick={() => void retryItem(item.id)}
+                          className="rounded-md border border-neutral-300 px-2 py-0.5 text-xs text-neutral-600 hover:border-neutral-500"
+                        >
+                          重试
+                        </button>
+                      </div>
                     ) : (
                       <span className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900" />
                     )}
                   </div>
                   <div className="flex items-center justify-between gap-1 px-2 py-1.5">
-                    <span className="truncate text-xs text-neutral-500" title={`${item.config.emotion} · ${item.config.type}`}>
-                      {item.config.emotion}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDetailId(item.id)}
+                      className="truncate text-left text-xs text-neutral-500 hover:text-neutral-900"
+                      title="查看完整配置 / prompt"
+                    >
+                      {item.config.emotion} · {item.config.type}
+                    </button>
                     {item.status === 'done' && item.url && (
-                      <button
-                        type="button"
-                        onClick={() => handleDownload(item.url!, item.id)}
-                        className="shrink-0 text-xs text-neutral-400 hover:text-neutral-900"
-                      >
-                        下载
-                      </button>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void saveItem(item.id)}
+                          disabled={!!item.savedAssetId}
+                          className="text-xs text-neutral-400 hover:text-neutral-900 disabled:text-emerald-500 disabled:hover:text-emerald-500"
+                        >
+                          {item.savedAssetId ? '已存' : '存图库'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDownload(item.url!, item.id)}
+                          className="text-xs text-neutral-400 hover:text-neutral-900"
+                        >
+                          下载
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -217,6 +305,68 @@ export function VisualAssetPage() {
           )}
         </section>
       </main>
+
+      {detailItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setDetailId(null)}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-lg overflow-auto rounded-xl bg-white p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-neutral-800">配置详情</h2>
+              <button
+                type="button"
+                onClick={() => setDetailId(null)}
+                className="text-neutral-400 hover:text-neutral-900"
+                aria-label="关闭"
+              >
+                ✕
+              </button>
+            </div>
+            {detailItem.url && (
+              <img
+                src={detailItem.url}
+                alt=""
+                className="mb-3 w-full cursor-zoom-in rounded-lg"
+                onClick={() => setLightboxUrl(detailItem.url!)}
+              />
+            )}
+            <div className="mb-1 text-xs font-semibold text-neutral-500">结构化配置</div>
+            <pre className="mb-3 overflow-auto rounded-md bg-neutral-50 p-3 text-xs text-neutral-700">
+              {JSON.stringify(detailItem.config, null, 2)}
+            </pre>
+            <div className="mb-1 text-xs font-semibold text-neutral-500">展开后的 Prompt</div>
+            <p className="rounded-md bg-neutral-50 p-3 text-xs leading-relaxed text-neutral-700">
+              {detailItem.prompt || '（尚未生成）'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(null)}
+            className="absolute right-5 top-5 text-2xl leading-none text-white/80 hover:text-white"
+            aria-label="关闭大图"
+          >
+            ✕
+          </button>
+          <img
+            src={lightboxUrl}
+            alt=""
+            className="max-h-[92vh] max-w-[92vw] rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
