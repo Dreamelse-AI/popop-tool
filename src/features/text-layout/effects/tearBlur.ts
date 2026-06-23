@@ -57,20 +57,20 @@ export function drawTearBlur(rc: RenderContext, text: string, params: EffectPara
   const { ctx, width, height, scale } = rc;
   const rng = mulberry32(params.seed);
 
-  const fontSize = clamp(params.minSize, 12, 200) * scale;
   const blurMax = Math.max(1, params.blur * scale);
   const spread = params.spread / 100;
   const pad = params.padding * scale;
   const letterSpacing = params.tearLetterSpacing * scale;
-  const lineGap = fontSize * (params.tearLineSpacing / 100);
   const blurRadius = params.tearBlurRadius * scale;
-  const weight = weightForSize(fontSize / Math.max(scale, 0.0001), rc.fontKind);
-  const font = `${weight} ${fontSize}px ${rc.fontFamily}`;
   const maxWidth = width - pad * 2;
+  const maxHeight = height - pad * 2;
+  const lineRatio = params.tearLineSpacing / 100;
 
-  const measure = (s: string): number => {
+  // 在给定字号下测量一行宽度
+  const measureAt = (s: string, size: number): number => {
+    const weight = weightForSize(size / Math.max(scale, 0.0001), rc.fontKind);
     ctx.save();
-    ctx.font = font;
+    ctx.font = `${weight} ${size}px ${rc.fontFamily}`;
     const chars = [...s];
     const w = chars.reduce(
       (sum, char, index) =>
@@ -81,8 +81,32 @@ export function drawTearBlur(rc: RenderContext, text: string, params: EffectPara
     return w;
   };
 
-  // 强制分段 → 每段按宽度自动换行 → 汇总成所有行
-  const lines = paragraphs(text).flatMap((p) => wrapParagraph(measure, p, maxWidth));
+  // 字号自适应：从参数字号往下递减，按该字号换行测高，
+  // 直到全部行的总高 + 最宽行都落在安全区内，硬保证不溢出
+  const startSize = clamp(params.minSize, 12, 200) * scale;
+  const minSize = 18 * scale;
+  let fontSize = startSize;
+  let lines: string[] = [];
+  for (let s = Math.floor(startSize); s >= minSize; s--) {
+    const cand = paragraphs(text).flatMap((p) =>
+      wrapParagraph((str) => measureAt(str, s), p, maxWidth),
+    );
+    const blockH = (cand.length - 1) * s * lineRatio + s;
+    const widest = cand.reduce((m, l) => Math.max(m, measureAt(l, s)), 0);
+    if (blockH <= maxHeight && widest <= maxWidth) {
+      fontSize = s;
+      lines = cand;
+      break;
+    }
+    fontSize = s;
+    lines = cand;
+  }
+
+  const lineGap = fontSize * lineRatio;
+  const weight = weightForSize(fontSize / Math.max(scale, 0.0001), rc.fontKind);
+  const font = `${weight} ${fontSize}px ${rc.fontFamily}`;
+  const measure = (s: string): number => measureAt(s, fontSize);
+
   const startY = height / 2 - ((lines.length - 1) * lineGap) / 2;
 
   // 基础清晰文字层
