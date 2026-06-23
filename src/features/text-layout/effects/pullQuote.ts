@@ -3,9 +3,8 @@ import {
   clamp,
   drawHairline,
   drawLine,
-  measureLine,
+  fitTextBlock,
   paragraphs,
-  wrapByWidth,
   type RenderContext,
 } from './shared';
 import { KICKER_TRACKING_EM, MONO_STACK, weightForSize } from '../typography';
@@ -14,6 +13,8 @@ import { KICKER_TRACKING_EM, MONO_STACK, weightForSize } from '../typography';
  * 拉引文式（借鉴 guizang M04 Pull Quote 的纯文字版面，非代码拷贝）。
  * 超大居中引文 + 上方安静 kicker + 下方发丝线与来源行。克制、有章法。
  * 文案约定：首段为引文主体，第二段（若有）为来源/出处。
+ *
+ * 硬约束：引文字号按可用区域 + 字数自动计算，四周留安全边距，绝不溢出画布。
  */
 export function drawPullQuote(rc: RenderContext, text: string, params: EffectParams): void {
   const { ctx, width, height, scale } = rc;
@@ -24,19 +25,28 @@ export function drawPullQuote(rc: RenderContext, text: string, params: EffectPar
   const sourceText = segs[1] ?? '';
 
   const maxWidth = width - pad * 2;
-  const quoteSize = clamp(params.titleSize, 44, 120) * scale;
-  const quoteWeight = weightForSize(quoteSize / scale, rc.fontKind);
-  const quoteStyle = {
-    size: quoteSize,
-    weight: quoteWeight,
-    family: rc.fontFamily,
-    color: rc.fontColor,
-    letterSpacing: quoteSize * 0.04,
-  };
-  const lines = wrapByWidth((s) => measureLine(ctx, s, quoteStyle), quoteText, maxWidth);
+  const kickerSize = 22 * scale;
+  const srcSize = 20 * scale;
+
+  // 预留顶部 kicker、底部来源行（发丝线 + 文字）
+  const topReserve = kickerSize * 2.6;
+  const bottomReserve = srcSize * 3.2;
+  const areaTop = pad + topReserve;
+  const areaBottom = height - pad - bottomReserve;
+  const areaH = Math.max(60 * scale, areaBottom - areaTop);
+
+  const quoteMax = clamp(params.titleSize, 44, 120) * scale;
+  const fit = fitTextBlock(
+    ctx,
+    [quoteText],
+    maxWidth,
+    areaH,
+    rc.fontFamily,
+    (s) => weightForSize(s / scale, rc.fontKind),
+    { lineHeightRatio: 1.22, min: 28 * scale, max: quoteMax, letterRatio: 0.04 },
+  );
 
   // 顶部 kicker
-  const kickerSize = 22 * scale;
   drawLine(
     ctx,
     'QUOTE · 留给你的',
@@ -53,19 +63,30 @@ export function drawPullQuote(rc: RenderContext, text: string, params: EffectPar
     'center',
   );
 
-  // 居中引文块
-  const lineH = quoteSize * 1.22;
-  const blockH = lines.length * lineH;
-  let y = height / 2 - blockH / 2;
-  for (const line of lines) {
-    drawLine(ctx, line, width / 2, y + lineH / 2, quoteStyle, 'center');
-    y += lineH;
+  // 居中引文块（在引文区内纵向居中）
+  const quoteStyle = {
+    size: fit.size,
+    weight: weightForSize(fit.size / scale, rc.fontKind),
+    family: rc.fontFamily,
+    color: rc.fontColor,
+    letterSpacing: fit.size * 0.04,
+  };
+  let y = areaTop + (areaH - fit.blockHeight) / 2;
+  for (const line of fit.lines) {
+    drawLine(ctx, line, width / 2, y + fit.lineHeight / 2, quoteStyle, 'center');
+    y += fit.lineHeight;
   }
 
   // 底部来源行（发丝线 + mono）
-  const srcSize = 20 * scale;
   const srcY = height - pad - srcSize;
-  drawHairline(ctx, width / 2 - maxWidth * 0.18, srcY - srcSize * 1.3, maxWidth * 0.36, rc.accent, Math.max(1, scale));
+  drawHairline(
+    ctx,
+    width / 2 - maxWidth * 0.18,
+    srcY - srcSize * 1.3,
+    maxWidth * 0.36,
+    rc.accent,
+    Math.max(1, scale),
+  );
   if (sourceText) {
     drawLine(
       ctx,

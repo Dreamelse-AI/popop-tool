@@ -79,6 +79,65 @@ export function wrapByWidth(
   return lines.length ? lines : [paragraph];
 }
 
+/** 自适应排版结果：在可用区域内能放下全部文字的最大字号 + 换行。 */
+export interface FittedText {
+  /** 选定字号(px，已是最终绘制字号，不需再乘 scale) */
+  size: number;
+  /** 按该字号换行后的所有行 */
+  lines: string[];
+  /** 行高(px) = size * lineHeightRatio */
+  lineHeight: number;
+  /** 文本块总高度(px) */
+  blockHeight: number;
+}
+
+/**
+ * 在给定可用宽高内，自动求出能放下整段文字的最大字号（硬保证不溢出）。
+ * 从 maxSize 往下递减，按每个候选字号做换行并算总高，直到宽和高都不超界。
+ *
+ * @param ctx            画布上下文（用于测量）
+ * @param paragraphs     已分好的段落（每段会各自换行，段间不合并）
+ * @param maxWidth       可用宽度(px)
+ * @param maxHeight      可用高度(px)
+ * @param family         字体族
+ * @param kindWeight     给定字号返回字重的函数（配合「越大越细」）
+ * @param opts           lineHeightRatio 行高系数、min/max 字号上下限、letterRatio 字间距相对字号比例
+ */
+export function fitTextBlock(
+  ctx: CanvasRenderingContext2D,
+  paragraphsList: string[],
+  maxWidth: number,
+  maxHeight: number,
+  family: string,
+  kindWeight: (size: number) => number,
+  opts: { lineHeightRatio: number; min: number; max: number; letterRatio?: number },
+): FittedText {
+  const { lineHeightRatio, min, max, letterRatio = 0 } = opts;
+
+  const layoutAt = (size: number): { lines: string[]; blockHeight: number; fits: boolean } => {
+    const weight = kindWeight(size);
+    const ls = size * letterRatio;
+    const measure = (s: string): number =>
+      measureLine(ctx, s, { size, weight, family, color: '#000', letterSpacing: ls });
+    // 任一单字宽度已超出可用宽 → 该字号宽度不达标
+    const lines = paragraphsList.flatMap((p) => wrapByWidth(measure, p, maxWidth));
+    const widest = lines.reduce((m, l) => Math.max(m, measure(l)), 0);
+    const blockHeight = lines.length * size * lineHeightRatio;
+    return { lines, blockHeight, fits: blockHeight <= maxHeight && widest <= maxWidth };
+  };
+
+  // 从大到小整数递减，取第一个能放下的字号
+  for (let size = Math.floor(max); size >= min; size--) {
+    const r = layoutAt(size);
+    if (r.fits) {
+      return { size, lines: r.lines, lineHeight: size * lineHeightRatio, blockHeight: r.blockHeight };
+    }
+  }
+  // 到下限仍放不下：用下限字号兜底（极端长文案，至少不崩）
+  const r = layoutAt(min);
+  return { size: min, lines: r.lines, lineHeight: min * lineHeightRatio, blockHeight: r.blockHeight };
+}
+
 /** 渲染上下文：所有 effect 共享的画布与风格封装。 */
 export interface RenderContext {
   ctx: CanvasRenderingContext2D;
