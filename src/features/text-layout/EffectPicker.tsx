@@ -38,11 +38,7 @@ function Chip({
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition ${
-        active
-          ? 'border-neutral-900 bg-neutral-900 text-white'
-          : 'border-neutral-300 bg-white text-neutral-700 hover:border-neutral-500'
-      }`}
+      className={active ? 'pop-chip-on inline-flex items-center gap-1.5' : 'pop-chip inline-flex items-center gap-1.5'}
     >
       {swatch && (
         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: swatch }} />

@@ -16,18 +16,14 @@ export function PalettePicker({ value, onChange }: PalettePickerProps) {
       <button
         type="button"
         onClick={() => onChange(RANDOM)}
-        className={`self-start rounded-full border px-3 py-1.5 text-sm transition ${
-          value === RANDOM
-            ? 'border-neutral-900 bg-neutral-900 text-white'
-            : 'border-neutral-300 bg-white text-neutral-700 hover:border-neutral-500'
-        }`}
+        className={value === RANDOM ? 'pop-chip-on self-start' : 'pop-chip self-start'}
       >
         随机配色
       </button>
 
       {groups.map((group) => (
         <div key={group.category}>
-          <div className="mb-1.5 text-xs font-medium text-neutral-400">{group.category}</div>
+          <div className="mb-1.5 font-mono text-xs font-semibold text-ink-3">{group.category}</div>
           <div className="flex flex-wrap gap-2">
             {group.palettes.map((p) => {
               const active = value === p.id;
@@ -37,17 +33,17 @@ export function PalettePicker({ value, onChange }: PalettePickerProps) {
                   type="button"
                   title={`${p.name} · ${p.mood}`}
                   onClick={() => onChange(p.id)}
-                  className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs transition ${
+                  className={`flex items-center gap-1.5 rounded-pop border-2 px-2 py-1 text-xs transition ${
                     active
-                      ? 'border-neutral-900 ring-1 ring-neutral-900'
-                      : 'border-neutral-200 hover:border-neutral-400'
+                      ? 'border-ink bg-cream shadow-sticker-sm'
+                      : 'border-ink bg-paper hover:bg-cream-soft'
                   }`}
                 >
                   <span
-                    className="h-4 w-4 rounded"
+                    className="h-4 w-4 rounded border border-ink"
                     style={{ background: toCssBackground(p.bgColor) }}
                   />
-                  <span className="text-neutral-700">{p.name}</span>
+                  <span className="font-semibold text-ink">{p.name}</span>
                 </button>
               );
             })}

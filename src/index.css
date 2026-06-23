@@ -1,8 +1,58 @@
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import 'tailwindcss';
 
+/* =========================================================================
+ * POPOP 工具站设计系统 · sticker / cream 风格
+ * 设计语言文档见 docs/design-system.md，新增工具一律复用本文件的 token 与 .pop-* 组件类。
+ * ========================================================================= */
+
+@theme {
+  /* —— 纸张 / 墨色 —— */
+  --color-paper: #ffffff;
+  --color-paper-2: #fbfaf4;
+  --color-soft: #f4f0e4;
+  --color-code-bg: #fcf7e7;
+  --color-ink: #0b0b0b;
+  --color-ink-2: #46423a;
+  --color-ink-3: #8c877b;
+  --color-line: #ece7d8;
+
+  /* —— 品牌奶油色 —— */
+  --color-cream: #ead9a2;
+  --color-cream-2: #e3cd85;
+  --color-cream-soft: #fbf3d9;
+  --color-cream-deep: #d7bd6e;
+  --color-cream-line: #e6d199;
+
+  /* —— 语义色 —— */
+  --color-ok: #2f8b57;
+  --color-ok-soft: #d8efdf;
+  --color-err: #cf4a33;
+  --color-err-soft: #f7dbd3;
+  --color-info: #2e72be;
+  --color-info-soft: #dce9f7;
+  --color-warn: #be921a;
+  --color-warn-soft: #f5e7b4;
+
+  /* —— 圆角 —— */
+  --radius-pop: 10px;
+  --radius-pop-lg: 18px;
+  --radius-pop-xl: 24px;
+
+  /* —— 硬阴影（sticker 标志性）—— */
+  --shadow-sticker: 3px 3px 0 var(--color-ink);
+  --shadow-sticker-sm: 2px 2px 0 var(--color-ink);
+  --shadow-sticker-lg: 6px 6px 0 var(--color-ink);
+  --shadow-soft: 0 6px 22px -14px rgba(20, 18, 8, 0.5);
+
+  /* —— 字体 —— */
+  --font-display: 'Baloo 2', 'Plus Jakarta Sans', system-ui, 'PingFang SC', sans-serif;
+  --font-sans: 'Plus Jakarta Sans', 'PingFang SC', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', ui-monospace, monospace;
+}
+
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', system-ui,
-    sans-serif;
+  font-family: var(--font-sans);
 }
 
 html,
@@ -10,4 +60,119 @@ body,
 #root {
   height: 100%;
   margin: 0;
+}
+
+body {
+  background-color: var(--color-paper-2);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===== 标题字族 ===== */
+.font-display {
+  font-family: var(--font-display);
+}
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+@layer components {
+  /* ---------- 卡片 ---------- */
+  .pop-card {
+    @apply rounded-pop-lg border-2 border-ink bg-paper p-4 shadow-sticker;
+  }
+  .pop-card-flat {
+    @apply rounded-pop-lg border-2 border-ink bg-paper p-4;
+  }
+
+  /* ---------- 按钮 ---------- */
+  .pop-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-pop-lg border-2 border-ink px-5 py-3 text-sm font-bold transition active:translate-x-[1px] active:translate-y-[1px];
+  }
+  .pop-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-pop-lg border-2 border-ink bg-ink px-5 py-3 text-sm font-bold text-cream shadow-sticker transition hover:bg-ink-2 active:translate-x-[1px] active:translate-y-[1px] disabled:cursor-not-allowed disabled:border-line disabled:bg-soft disabled:text-ink-3 disabled:shadow-none;
+  }
+  .pop-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-pop-lg border-2 border-ink bg-paper px-5 py-3 text-sm font-bold text-ink shadow-sticker transition hover:bg-cream-soft active:translate-x-[1px] active:translate-y-[1px] disabled:cursor-not-allowed disabled:border-line disabled:text-ink-3 disabled:shadow-none;
+  }
+  .pop-btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-pop-lg border-2 border-err bg-err px-5 py-3 text-sm font-bold text-white shadow-sticker transition hover:bg-err/90 active:translate-x-[1px] active:translate-y-[1px] disabled:cursor-not-allowed disabled:border-line disabled:bg-soft disabled:text-ink-3 disabled:shadow-none;
+  }
+  /* 朴素文字操作（如「下载」「清空」） */
+  .pop-link {
+    @apply text-xs font-semibold text-ink-3 transition hover:text-ink;
+  }
+
+  /* ---------- chip / 胶囊切换 ---------- */
+  .pop-chip {
+    @apply rounded-full border-2 border-ink bg-paper px-3 py-1 text-xs font-semibold text-ink transition hover:bg-cream-soft;
+  }
+  .pop-chip-on {
+    @apply rounded-full border-2 border-ink bg-cream px-3 py-1 text-xs font-bold text-ink shadow-sticker-sm;
+  }
+  /* 比例 / 分辨率等小切换键 */
+  .pop-toggle {
+    @apply rounded-pop border-2 border-ink bg-paper px-2.5 py-1 text-xs font-semibold text-ink transition hover:bg-cream-soft;
+  }
+  .pop-toggle-on {
+    @apply rounded-pop border-2 border-ink bg-ink px-2.5 py-1 text-xs font-bold text-cream;
+  }
+  /* 可删除的预设 chip（名称 + ✕），含选中态 */
+  .pop-chip-tag {
+    @apply inline-flex items-center gap-1 rounded-full border-2 border-ink bg-paper px-3 py-1 text-xs font-semibold text-ink;
+  }
+  .pop-chip-tag-on {
+    @apply inline-flex items-center gap-1 rounded-full border-2 border-ink bg-cream px-3 py-1 text-xs font-bold text-ink shadow-sticker-sm;
+  }
+  .pop-chip-tag-muted {
+    @apply inline-flex items-center gap-1 rounded-full border-2 border-dashed border-cream-2 bg-soft px-3 py-1 text-xs text-ink-3;
+  }
+
+  /* ---------- 表单 ---------- */
+  .pop-input {
+    @apply w-full rounded-pop-lg border-2 border-ink bg-paper px-4 py-2.5 text-sm text-ink outline-none placeholder:text-ink-3 focus:bg-cream-soft;
+  }
+  .pop-textarea {
+    @apply w-full resize-none rounded-pop-lg border-2 border-ink bg-paper p-4 text-sm leading-relaxed text-ink outline-none placeholder:text-ink-3 focus:bg-cream-soft;
+  }
+  .pop-label {
+    @apply text-sm font-bold text-ink-2;
+  }
+
+  /* ---------- 标签 tag ---------- */
+  .pop-tag {
+    @apply inline-block rounded-full border border-cream-line bg-soft px-2 py-0.5 font-mono text-[10.5px] font-semibold uppercase tracking-wide text-ink-2;
+  }
+  .pop-tag-cream {
+    @apply inline-block rounded-full border border-cream-2 bg-cream px-2 py-0.5 font-mono text-[10.5px] font-semibold uppercase tracking-wide text-ink;
+  }
+
+  /* ---------- 顶栏 ---------- */
+  .pop-topbar {
+    @apply sticky top-0 z-30 border-b-2 border-ink bg-paper-2/90 backdrop-blur-md;
+  }
+
+  /* ---------- callout 提示块 ---------- */
+  .pop-callout {
+    @apply rounded-pop-lg border-2 border-l-8 border-ink bg-paper px-4 py-3 text-sm text-ink-2 shadow-sticker;
+  }
+  .pop-callout-err {
+    @apply rounded-pop-lg border-2 border-l-8 border-ink border-l-err bg-paper px-4 py-3 text-sm text-ink-2 shadow-sticker;
+  }
+  .pop-callout-info {
+    @apply rounded-pop-lg border-2 border-l-8 border-ink border-l-info bg-paper px-4 py-3 text-sm text-ink-2 shadow-sticker;
+  }
+  .pop-callout-ok {
+    @apply rounded-pop-lg border-2 border-l-8 border-ink border-l-ok bg-paper px-4 py-3 text-sm text-ink-2 shadow-sticker;
+  }
+
+  /* ---------- 空状态 ---------- */
+  .pop-empty {
+    @apply flex items-center justify-center rounded-pop-lg border-2 border-dashed border-cream-2 bg-paper px-6 text-center text-sm text-ink-3;
+  }
+
+  /* ---------- 加载转圈 ---------- */
+  .pop-spinner {
+    @apply animate-spin rounded-full border-2 border-cream-2 border-t-ink;
+  }
 }
