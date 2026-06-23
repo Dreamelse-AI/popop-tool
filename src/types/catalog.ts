@@ -5,11 +5,11 @@
  *   1) 拼进 prompt：告诉模型有哪些可选项及各自适用场景（whenToUse）
  *   2) 渲染引擎：照模型输出的 id 去渲染
  *
- * 分工：模型只选「离散项」（effectId / 背景 / 形状）；
+ * 分工：模型只选「离散项」（effectId / 背景）；
  *       数值参数（字号/模糊/边距…）由本地在区间内随机（见 randomizeParams）。
  */
 
-import type { EffectMode, FillShape } from './layout';
+import type { EffectMode } from './layout';
 
 /** 数值参数的随机区间：[最小, 最大]。生成时在区间内随机取值。 */
 export type ParamRange = [min: number, max: number];
@@ -23,8 +23,7 @@ export type NumericParamKey =
   | 'spread'
   | 'tearLetterSpacing'
   | 'tearLineSpacing'
-  | 'tearBlurRadius'
-  | 'imageThreshold';
+  | 'tearBlurRadius';
 
 /**
  * 单个参数的规格：自描述（键 + 标签 + 单位 + 区间 + 步进）。
@@ -56,19 +55,19 @@ export interface EffectEntry {
   params: ParamSpec[];
   /** 缩略图强调色（仅 UI 选择列表用） */
   swatch: string;
-  /** 该效果是否需要形状（仅 imageFill = true） */
-  needsShape?: boolean;
 }
 
 /** 配色库的一条目录项：一套审过的安全配色。 */
 export interface PaletteEntry {
   /** 唯一 id（模型输出用） */
   id: string;
+  /** 所属大类（如「深夜/孤独系」），仅用于 UI 分组展示 */
+  category: string;
   /** 展示名 */
   name: string;
   /** 适用气质，拼进 prompt 供模型选 */
   mood: string;
-  /** 背景色（纯色或 CSS 渐变） */
+  /** 背景色：纯色 '#16110d'，或两段渐变 '#A → #B'（渲染时转 CSS 线性渐变） */
   bgColor: string;
   /** 文字主色（已与 bgColor 校验过对比度） */
   fontColor: string;
@@ -76,7 +75,10 @@ export interface PaletteEntry {
   accent?: string;
 }
 
-/** 图片库的一条目录项：一张可作背景的氛围图。 */
+/**
+ * 图片库的一条目录项：一张可作背景的氛围图。
+ * 图片来自「视觉资产生产引擎」的产出，通过 tags 与情绪/类型关联检索。
+ */
 export interface ImageEntry {
   /** 唯一 id（模型输出用） */
   id: string;
@@ -84,10 +86,15 @@ export interface ImageEntry {
   name: string;
   /** 适用气质，拼进 prompt 供模型选 */
   mood: string;
-  /** 背景图地址（氛围图工具产出） */
+  /** 关联标签（情绪/主题等），用于和视觉资产引擎产出对齐检索 */
+  tags: string[];
+  /** 背景图地址（视觉资产引擎产出） */
   url: string;
-  /** 压在此图上推荐的文字色（保证可读） */
-  fontColor: string;
+  /**
+   * 压在此图上的文字色。
+   * 缺省时由运行时按图片明暗自动判定黑/白（见 detectFontColor）。
+   */
+  fontColor?: string;
   /** 图上叠加的遮罩（保证文字可读），CSS 颜色，可选 */
   overlay?: string;
 }
@@ -111,6 +118,4 @@ export interface GenerationOutput {
   effectId: EffectMode;
   /** 背景：配色或图片，二选一 */
   background: Background;
-  /** 仅 effectId='imageFill' 时需要：填充形状 */
-  shapeId?: FillShape;
 }

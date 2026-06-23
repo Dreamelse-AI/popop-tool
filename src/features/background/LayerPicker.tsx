@@ -17,7 +17,7 @@ export function LayerPicker<TId extends string>({
 }: LayerPickerProps<TId>) {
   return (
     <div>
-      <div className="mb-2 text-sm font-semibold text-neutral-700">{title}</div>
+      <div className="pop-label mb-2">{title}</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {options.map((opt) => {
           const active = opt.id === selected;
@@ -29,16 +29,12 @@ export function LayerPicker<TId extends string>({
               aria-pressed={active}
               className={
                 active
-                  ? 'flex flex-col rounded-lg border border-neutral-900 bg-neutral-900 px-3 py-2 text-left text-white transition'
-                  : 'flex flex-col rounded-lg border border-neutral-200 bg-white px-3 py-2 text-left transition hover:border-neutral-400'
+                  ? 'flex flex-col rounded-pop border-2 border-ink bg-ink px-3 py-2 text-left text-cream shadow-sticker-sm transition'
+                  : 'flex flex-col rounded-pop border-2 border-ink bg-paper px-3 py-2 text-left transition hover:bg-cream-soft'
               }
             >
-              <span className="text-sm font-medium">{opt.name}</span>
-              <span
-                className={
-                  active ? 'text-xs text-neutral-300' : 'text-xs text-neutral-400'
-                }
-              >
+              <span className="text-sm font-bold">{opt.name}</span>
+              <span className={active ? 'text-xs text-cream/70' : 'text-xs text-ink-3'}>
                 {opt.mood}
               </span>
             </button>

@@ -36,16 +36,12 @@ export function ChipGroup({
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-sm font-semibold text-neutral-700">
+        <span className="pop-label">
           {title}
-          <span className="ml-2 text-xs font-normal text-neutral-400">{hint}</span>
+          <span className="ml-2 font-mono text-[11px] font-normal text-ink-3">{hint}</span>
         </span>
         {selected.length > 0 && (
-          <button
-            type="button"
-            onClick={onClear}
-            className="text-xs text-neutral-400 hover:text-neutral-700"
-          >
+          <button type="button" onClick={onClear} className="pop-link">
             清空
           </button>
         )}
@@ -60,11 +56,7 @@ export function ChipGroup({
               onClick={() => onToggle(o.id)}
               aria-pressed={active}
               title={o.label}
-              className={
-                active
-                  ? 'rounded-full border border-neutral-900 bg-neutral-900 px-3 py-1 text-xs font-medium text-white'
-                  : 'rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-neutral-600 transition hover:border-neutral-400'
-              }
+              className={active ? 'pop-chip-on' : 'pop-chip'}
             >
               {o.name}
               {o.label && <span className="ml-1 opacity-60">{o.label}</span>}

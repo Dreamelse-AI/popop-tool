@@ -51,25 +51,21 @@ export function StyleManager({ selected, onToggle, onClear }: StyleManagerProps)
   };
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+    <div className="pop-card">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm font-semibold text-neutral-700">
+        <span className="pop-label">
           Style 风格
-          <span className="ml-2 text-xs font-normal text-neutral-400">{hint}</span>
+          <span className="ml-2 font-mono text-[11px] font-normal text-ink-3">{hint}</span>
         </span>
         {selected.length > 0 && (
-          <button
-            type="button"
-            onClick={onClear}
-            className="text-xs text-neutral-400 hover:text-neutral-700"
-          >
+          <button type="button" onClick={onClear} className="pop-link">
             清空选择
           </button>
         )}
       </div>
 
       {styles.length === 0 ? (
-        <p className="mb-3 text-xs text-neutral-400">
+        <p className="mb-3 text-xs text-ink-3">
           还没有风格。在下方填名称和提示词，保存后即可参与生成。
         </p>
       ) : (
@@ -81,8 +77,8 @@ export function StyleManager({ selected, onToggle, onClear }: StyleManagerProps)
                 key={s.id}
                 className={
                   active
-                    ? 'inline-flex items-center gap-1 rounded-full border border-neutral-900 bg-neutral-900 px-3 py-1 text-xs font-medium text-white'
-                    : 'inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-neutral-600'
+                    ? 'inline-flex items-center gap-1 rounded-full border-2 border-ink bg-cream px-3 py-1 text-xs font-bold text-ink shadow-sticker-sm'
+                    : 'inline-flex items-center gap-1 rounded-full border-2 border-ink bg-paper px-3 py-1 text-xs font-semibold text-ink'
                 }
               >
                 <button
@@ -97,7 +93,7 @@ export function StyleManager({ selected, onToggle, onClear }: StyleManagerProps)
                   type="button"
                   onClick={() => handleRemove(s.id)}
                   aria-label={`删除 ${s.name}`}
-                  className={active ? 'text-white/70 hover:text-white' : 'text-neutral-400 hover:text-red-500'}
+                  className="text-ink-3 hover:text-err"
                 >
                   ✕
                 </button>
@@ -107,32 +103,28 @@ export function StyleManager({ selected, onToggle, onClear }: StyleManagerProps)
         </div>
       )}
 
-      <div className="flex flex-col gap-2 border-t border-neutral-100 pt-3">
+      <div className="flex flex-col gap-2 border-t-2 border-dashed border-cream-line pt-3">
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="风格名称，如 Apple Intelligence"
-          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:border-neutral-900 focus:outline-none"
+          className="pop-input py-1.5"
         />
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="风格提示词（英文，描述整体视觉风格）"
           rows={2}
-          className="resize-y rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:border-neutral-900 focus:outline-none"
+          className="pop-textarea resize-y py-1.5"
         />
         <div className="flex items-center justify-between">
           {error ? (
-            <span className="text-xs text-red-500">{error}</span>
+            <span className="text-xs text-err">{error}</span>
           ) : (
-            <span className="text-xs text-neutral-400">保存后存在本地浏览器</span>
+            <span className="text-xs text-ink-3">保存后存在本地浏览器</span>
           )}
-          <button
-            type="button"
-            onClick={handleAdd}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-700"
-          >
+          <button type="button" onClick={handleAdd} className="pop-btn-primary px-3 py-1.5 text-xs">
             保存风格
           </button>
         </div>

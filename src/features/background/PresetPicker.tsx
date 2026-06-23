@@ -30,11 +30,7 @@ export function PresetPicker({ presets, current, onApply }: PresetPickerProps) {
             type="button"
             onClick={() => onApply(preset.selection)}
             title={preset.description}
-            className={
-              active
-                ? 'rounded-full border border-neutral-900 bg-neutral-900 px-4 py-1.5 text-xs font-medium text-white'
-                : 'rounded-full border border-neutral-200 bg-white px-4 py-1.5 text-xs font-medium text-neutral-600 transition hover:border-neutral-400'
-            }
+            className={active ? 'pop-chip-on px-4 py-1.5' : 'pop-chip px-4 py-1.5'}
           >
             {preset.name}
           </button>

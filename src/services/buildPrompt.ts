@@ -15,7 +15,7 @@ import { MAX_INPUT_LENGTH } from '@/types/layout';
 /** 排版效果可选项清单（含 whenToUse）。 */
 function effectsBlock(): string {
   const lines = EFFECT_CATALOG.map(
-    (e) => `  - "${e.id}"（${e.name}）：${e.whenToUse}${e.needsShape ? ' 【需指定 shapeId】' : ''}`,
+    (e) => `  - "${e.id}"（${e.name}）：${e.whenToUse}`,
   );
   return `可选排版效果（effectId 从中选其一）：\n${lines.join('\n')}`;
 }
@@ -36,10 +36,6 @@ function imagesBlock(): string {
   return `可选背景图（background.type="image" 时，imageId 从中选其一）：\n${lines.join('\n')}`;
 }
 
-/** 形状清单（imageFill 用）。 */
-const SHAPE_BLOCK = `可选填充形状（shapeId，仅 effectId="imageFill" 时需要）：
-  - "heart"（爱心）/ "star"（星星）/ "circle"（圆形）/ "diamond"（菱形）`;
-
 /** 输出 schema 说明。模型只选离散项，不输出任何数值参数。 */
 const OUTPUT_SCHEMA = `严格按以下 JSON 结构输出（不要包含数值排版参数，字号/模糊等由系统在安全区间内随机）：
 {
@@ -47,7 +43,6 @@ const OUTPUT_SCHEMA = `严格按以下 JSON 结构输出（不要包含数值排
   "effectId": "上面列表中的效果 id",
   "background": { "type": "palette", "paletteId": "配色 id" }
   // 或使用背景图：{ "type": "image", "imageId": "图片 id" }
-  // 若 effectId 为 "imageFill"，额外加： "shapeId": "heart"
 }`;
 
 /**
@@ -60,7 +55,6 @@ export function buildStylePromptSection(): string {
     effectsBlock(),
     palettesBlock(),
     imagesBlock(),
-    SHAPE_BLOCK,
     '【背景规则】配色与背景图二选一，只能提供其中一种。',
     OUTPUT_SCHEMA,
   ]

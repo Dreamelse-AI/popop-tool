@@ -54,19 +54,15 @@ export function EmotionManager() {
   };
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+    <div className="pop-card">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm font-semibold text-neutral-700">
+        <span className="pop-label">
           表情情绪
-          <span className="ml-2 text-xs font-normal text-neutral-400">
+          <span className="ml-2 font-mono text-[11px] font-normal text-ink-3">
             九宫格按顺序取前 9 个
           </span>
         </span>
-        <button
-          type="button"
-          onClick={resetEmotions}
-          className="text-xs text-neutral-400 hover:text-neutral-700"
-        >
+        <button type="button" onClick={resetEmotions} className="pop-link">
           恢复默认
         </button>
       </div>
@@ -78,13 +74,7 @@ export function EmotionManager() {
           return (
             <span
               key={e.id}
-              className={
-                active
-                  ? 'inline-flex items-center gap-1 rounded-full border border-neutral-900 bg-neutral-900 px-3 py-1 text-xs font-medium text-white'
-                  : ignored
-                    ? 'inline-flex items-center gap-1 rounded-full border border-dashed border-neutral-300 bg-neutral-50 px-3 py-1 text-xs text-neutral-400'
-                    : 'inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-neutral-600'
-              }
+              className={active ? 'pop-chip-tag-on' : ignored ? 'pop-chip-tag-muted' : 'pop-chip-tag'}
             >
               <button
                 type="button"
@@ -98,7 +88,7 @@ export function EmotionManager() {
                 type="button"
                 onClick={() => removeEmotion(e.id)}
                 aria-label={`删除 ${e.label}`}
-                className={active ? 'text-white/70 hover:text-white' : 'text-neutral-400 hover:text-red-500'}
+                className="text-ink-3 hover:text-err"
               >
                 ✕
               </button>
@@ -108,33 +98,33 @@ export function EmotionManager() {
       </div>
 
       {overflow && (
-        <p className="mb-2 text-xs text-amber-600">
+        <p className="mb-2 text-xs text-warn">
           当前 {emotions.length} 个，超出 9 个的（虚线）不会出现在九宫格里。
         </p>
       )}
 
-      <div className="flex flex-col gap-2 border-t border-neutral-100 pt-3">
+      <div className="flex flex-col gap-2 border-t-2 border-dashed border-cream-line pt-3">
         <div className="flex gap-2">
           <input
             type="text"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="中文标签，如 期待"
-            className="w-28 shrink-0 rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:border-neutral-900 focus:outline-none"
+            className="pop-input w-28 shrink-0 py-1.5"
           />
           <input
             type="text"
             value={en}
             onChange={(e) => setEn(e.target.value)}
             placeholder="英文描述，如 excited, looking forward"
-            className="flex-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm focus:border-neutral-900 focus:outline-none"
+            className="pop-input flex-1 py-1.5"
           />
         </div>
         <div className="flex items-center justify-between">
           {error ? (
-            <span className="text-xs text-red-500">{error}</span>
+            <span className="text-xs text-err">{error}</span>
           ) : (
-            <span className="text-xs text-neutral-400">
+            <span className="text-xs text-ink-3">
               {editingId ? '修改中…' : '英文描述用于让模型更准确理解情绪'}
             </span>
           )}
@@ -143,7 +133,7 @@ export function EmotionManager() {
               <button
                 type="button"
                 onClick={handleCancelEdit}
-                className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs text-neutral-600 hover:border-neutral-500"
+                className="pop-btn-secondary px-3 py-1.5 text-xs"
               >
                 取消
               </button>
@@ -151,7 +141,7 @@ export function EmotionManager() {
             <button
               type="button"
               onClick={handleSave}
-              className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-700"
+              className="pop-btn-primary px-3 py-1.5 text-xs"
             >
               {editingId ? '更新' : '添加情绪'}
             </button>

@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import type { MattingMode } from '@/types/sticker';
 import { useStickerStore } from '@/features/sticker/store';
@@ -6,6 +5,10 @@ import { PromptManager } from '@/features/sticker/PromptManager';
 import { EmotionManager } from '@/features/sticker/EmotionManager';
 import { ReferenceUploader } from '@/features/sticker/ReferenceUploader';
 import { downloadImage } from '@/features/background/downloadImage';
+import { ToolHeader } from '@/components/ToolHeader';
+import { Lightbox } from '@/components/Lightbox';
+import { ResultPanel } from '@/components/ResultPanel';
+import { IconDownload } from '@/components/icons';
 
 const MATTING_OPTIONS: { id: MattingMode; label: string }[] = [
   { id: 'colorKey', label: '色键抠图（去背景）' },
@@ -49,19 +52,12 @@ export function StickerPage() {
   };
 
   return (
-    <div className="min-h-full bg-neutral-100">
-      <header className="border-b border-neutral-200 bg-white px-8 py-4">
-        <Link to="/" className="text-sm text-neutral-500 hover:text-neutral-900">
-          ← 返回工具站
-        </Link>
-        <div className="mt-1">
-          <h1 className="text-xl font-bold text-neutral-900">表情包生成器</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            上传人物形象 → 一次出图生成 3×3 九宫格 → 自动切成 9 张并去背景
-          </p>
-        </div>
-      </header>
-      <main className="mx-auto grid max-w-6xl grid-cols-1 gap-8 p-8 lg:grid-cols-2">
+    <div className="min-h-full">
+      <ToolHeader
+        title="表情包生成器"
+        subtitle="上传人物形象 → 一次出图生成 3×3 九宫格 → 自动切成 9 张并去背景"
+      />
+      <main className="mx-auto grid max-w-6xl grid-cols-1 gap-8 p-6 sm:p-8 lg:grid-cols-2">
         <section className="flex flex-col gap-5">
           <ReferenceUploader
             images={referenceImages}
@@ -74,33 +70,30 @@ export function StickerPage() {
 
           <EmotionManager />
           {/* [CONTROLS] */}
-          <div className="flex flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-4">
+          <div className="pop-card flex flex-col gap-4">
             <div>
-              <div className="mb-1.5 text-sm font-semibold text-neutral-700">去背景</div>
+              <div className="pop-label mb-1.5">去背景</div>
               <div className="flex flex-wrap gap-1.5">
                 {MATTING_OPTIONS.map((m) => (
                   <button
                     key={m.id}
                     type="button"
                     onClick={() => setMatting(m.id)}
-                    className={
-                      m.id === matting
-                        ? 'rounded-md border border-neutral-900 bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white'
-                        : 'rounded-md border border-neutral-200 bg-white px-2.5 py-1 text-xs text-neutral-600 hover:border-neutral-400'
-                    }
+                    className={m.id === matting ? 'pop-toggle-on' : 'pop-toggle'}
                   >
                     {m.label}
                   </button>
                 ))}
               </div>
               {matting === 'colorKey' && (
-                <p className="mt-1.5 text-xs text-neutral-400">
+                <p className="mt-1.5 text-xs text-ink-3">
                   会要求模型出纯绿背景，再按颜色阈值抠掉。发丝等细节可能抠不净，效果不满意可改用「不抠图」。
                 </p>
               )}
             </div>
             {/* [RATIO_RES] */}
-            <p className="text-xs text-neutral-400">
+            {/* [RATIO_RES] */}
+            <p className="text-xs text-ink-3">
               出图规格固定：九宫格大图 1:1 · 2K（3×3 均分），单个表情居中裁成 1:1。
             </p>
           </div>
@@ -110,125 +103,90 @@ export function StickerPage() {
               type="button"
               onClick={() => void generate()}
               disabled={busy}
-              className="flex-1 rounded-lg bg-neutral-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-neutral-300"
+              className="pop-btn-primary flex-1"
             >
               {busy ? (STATUS_TEXT[status] ?? '处理中…') : '生成 9 个表情'}
             </button>
             {busy && (
-              <button
-                type="button"
-                onClick={cancel}
-                className="rounded-lg border border-neutral-300 px-4 py-3 text-sm font-medium text-neutral-600 hover:border-neutral-500"
-              >
+              <button type="button" onClick={cancel} className="pop-btn-secondary">
                 取消
               </button>
             )}
           </div>
-          {status === 'error' && errorMessage && (
-            <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{errorMessage}</p>
-          )}
+          {status === 'error' && errorMessage && <p className="pop-callout-err">{errorMessage}</p>}
         </section>
         {/* [RIGHT] */}
-        <section className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold text-neutral-700">
-              结果 {items.length > 0 && `（${doneItems.length}/${items.length}）`}
-            </div>
-            {doneItems.length > 0 && (
-              <button
-                type="button"
-                onClick={handleDownloadAll}
-                className="text-xs text-neutral-500 hover:text-neutral-900"
-              >
-                批量下载（{doneItems.length}）
-              </button>
-            )}
-          </div>
-
+        <ResultPanel>
           {items.length === 0 ? (
-            <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-white px-6 text-center text-sm text-neutral-400">
+            <div className="flex h-full items-center justify-center text-center text-sm text-ink-3">
               上传人物图、写好提示词后点「生成」，9 个表情会在这里出现
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-3">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white"
-                >
-                  <div
-                    className="flex aspect-square items-center justify-center"
-                    style={{
-                      backgroundImage:
-                        'linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%)',
-                      backgroundSize: '16px 16px',
-                      backgroundPosition: '0 0,0 8px,8px -8px,-8px 0',
-                    }}
-                  >
-                    {item.status === 'done' && item.dataUrl ? (
-                      <img
-                        src={item.dataUrl}
-                        alt={`表情 ${item.index + 1}`}
-                        className="h-full w-full cursor-zoom-in object-contain"
-                        onClick={() => setLightboxUrl(item.dataUrl!)}
-                      />
-                    ) : item.status === 'error' ? (
-                      <span className="px-2 text-center text-xs text-red-500">{item.error}</span>
-                    ) : (
-                      <span className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900" />
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between px-2 py-1.5">
-                    <span className="truncate text-xs text-neutral-500" title={item.emotionLabel}>
-                      {item.emotionLabel ?? `#${item.index + 1}`}
-                    </span>
-                    {item.status === 'done' && item.dataUrl && (
-                      <button
-                        type="button"
-                        onClick={() => downloadImage(item.dataUrl!, `sticker-${item.index + 1}.png`)}
-                        className="text-xs text-neutral-400 hover:text-neutral-900"
-                      >
-                        下载
-                      </button>
-                    )}
-                  </div>
+            <div className="flex flex-col gap-3">
+              {doneItems.length > 0 && (
+                <div className="flex items-center justify-end gap-3">
+                  <button type="button" onClick={handleDownloadAll} className="pop-link">
+                    批量下载（{doneItems.length}）
+                  </button>
+                  {gridUrl && (
+                    <button type="button" onClick={() => setLightboxUrl(gridUrl)} className="pop-link">
+                      看九宫格大图
+                    </button>
+                  )}
                 </div>
-              ))}
+              )}
+              <div className="grid grid-cols-3 gap-3">
+                {items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex flex-col overflow-hidden rounded-pop border-2 border-ink bg-paper shadow-sticker-sm"
+                  >
+                    <div
+                      className="flex aspect-square items-center justify-center"
+                      style={{
+                        backgroundImage:
+                          'linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%)',
+                        backgroundSize: '16px 16px',
+                        backgroundPosition: '0 0,0 8px,8px -8px,-8px 0',
+                      }}
+                    >
+                      {item.status === 'done' && item.dataUrl ? (
+                        <img
+                          src={item.dataUrl}
+                          alt={`表情 ${item.index + 1}`}
+                          className="h-full w-full cursor-zoom-in object-contain"
+                          onClick={() => setLightboxUrl(item.dataUrl!)}
+                        />
+                      ) : item.status === 'error' ? (
+                        <span className="px-2 text-center text-xs text-err">{item.error}</span>
+                      ) : (
+                        <span className="pop-spinner h-6 w-6" />
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between border-t-2 border-ink px-2 py-1.5">
+                      <span className="truncate text-xs font-semibold text-ink-2" title={item.emotionLabel}>
+                        {item.emotionLabel ?? `#${item.index + 1}`}
+                      </span>
+                      {item.status === 'done' && item.dataUrl && (
+                        <button
+                          type="button"
+                          onClick={() => downloadImage(item.dataUrl!, `sticker-${item.index + 1}.png`)}
+                          className="shrink-0 text-ink-3 transition hover:text-ink"
+                          title="下载"
+                          aria-label="下载"
+                        >
+                          <IconDownload />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
-
-          {gridUrl && (
-            <button
-              type="button"
-              onClick={() => setLightboxUrl(gridUrl)}
-              className="self-start text-xs text-neutral-400 hover:text-neutral-900"
-            >
-              查看原始九宫格大图
-            </button>
-          )}
-        </section>
+        </ResultPanel>
       </main>
-      {lightboxUrl && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4"
-          onClick={() => setLightboxUrl(null)}
-        >
-          <button
-            type="button"
-            onClick={() => setLightboxUrl(null)}
-            className="absolute right-5 top-5 text-2xl leading-none text-white/80 hover:text-white"
-            aria-label="关闭大图"
-          >
-            ✕
-          </button>
-          <img
-            src={lightboxUrl}
-            alt=""
-            className="max-h-[92vh] max-w-[92vw] rounded-lg object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
     </div>
   );
 }

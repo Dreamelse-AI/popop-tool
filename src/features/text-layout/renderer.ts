@@ -1,9 +1,9 @@
 import type { EffectMode, EffectParams, RenderStyle } from '@/types/layout';
 import type { RenderContext } from './effects/shared';
+import { fillCanvasBackground } from './colorUtils';
 import { drawRain } from './effects/rain';
 import { drawBarrage } from './effects/barrage';
 import { drawTearBlur } from './effects/tearBlur';
-import { drawImageFill } from './effects/imageFill';
 
 export interface RenderOptions {
   mode: EffectMode;
@@ -11,8 +11,6 @@ export interface RenderOptions {
   params: EffectParams;
   /** 渲染风格：字体/配色/背景图 */
   style: RenderStyle;
-  /** imageFill 模式使用的已加载图片（fillShape='image' 时） */
-  shapeImage?: HTMLImageElement | null;
   /** 背景图（来自图片库，已加载） */
   bgImage?: HTMLImageElement | null;
   /** 整体缩放：预览传 1，导出高清传 >1 */
@@ -44,7 +42,6 @@ export function renderLayout(canvas: HTMLCanvasElement, options: RenderOptions):
     text,
     params,
     style,
-    shapeImage = null,
     bgImage = null,
     scale = 1,
     fontWeight = '400',
@@ -55,11 +52,10 @@ export function renderLayout(canvas: HTMLCanvasElement, options: RenderOptions):
   const width = canvas.width;
   const height = canvas.height;
 
-  // 背景：底色 →（可选）背景图 →（可选）遮罩
+  // 背景：底色（纯色/渐变）→（可选）背景图 →（可选）遮罩
   ctx.save();
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = style.bgColor;
-  ctx.fillRect(0, 0, width, height);
+  fillCanvasBackground(ctx, style.bgColor, width, height);
   if (style.bgImageUrl && bgImage) {
     drawCover(ctx, bgImage, width, height);
     if (style.overlay) {
@@ -88,9 +84,6 @@ export function renderLayout(canvas: HTMLCanvasElement, options: RenderOptions):
       break;
     case 'tearBlur':
       drawTearBlur(rc, text, params);
-      break;
-    case 'imageFill':
-      drawImageFill(rc, text, params, shapeImage);
       break;
   }
 }

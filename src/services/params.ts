@@ -22,9 +22,6 @@ export const DEFAULT_PARAMS: EffectParams = {
   tearLetterSpacing: 2,
   tearLineSpacing: 150,
   tearBlurRadius: 120,
-  fillDirection: 'horizontal',
-  fillShape: 'heart',
-  imageThreshold: 128,
 };
 
 /** 数值型参数的键（可被区间随机覆盖的）。 */
@@ -35,7 +32,7 @@ export const DEFAULT_PARAMS: EffectParams = {
  *
  * @param mode  效果模式
  * @param seed  随机种子（不传则随机生成一个）
- * @param overrides 额外覆盖（如离散项 fillShape / fillDirection）
+ * @param overrides 额外覆盖（离散项或固定值）
  */
 export function randomizeParams(
   mode: EffectMode,
@@ -71,7 +68,8 @@ export function resolveStyle(background: Background): RenderStyle {
     if (img) {
       return {
         fontFamily: DEFAULT_FONT_FAMILY,
-        fontColor: img.fontColor,
+        // fontColor 缺省时先占位白字；真实判定在背景图加载完成后由 detectFontColor 覆盖
+        fontColor: img.fontColor ?? '#FFFFFF',
         bgColor: '#000000',
         bgImageUrl: img.url,
         overlay: img.overlay,
