@@ -11,26 +11,24 @@ import { KICKER_TRACKING_EM, MONO_STACK, weightForSize } from '../typography';
 
 /**
  * 拉引文式（借鉴 guizang M04 Pull Quote 的纯文字版面，非代码拷贝）。
- * 超大居中引文 + 上方安静 kicker + 下方发丝线与来源行。克制、有章法。
- * 文案约定：首段为引文主体，第二段（若有）为来源/出处。
+ * 上方安静 kicker → 中部居中引文（完整显示全部内容）→ 下方发丝线装饰。
  *
  * 硬约束：引文字号按可用区域 + 字数自动计算，四周留安全边距，绝不溢出画布。
+ * 全部输入内容都作为引文显示，按段落保留分段。
  */
 export function drawPullQuote(rc: RenderContext, text: string, params: EffectParams): void {
   const { ctx, width, height, scale } = rc;
   const pad = params.padding * scale;
 
+  // 整段输入都作为引文（按段落分段），不再把内容拆到来源行
   const segs = paragraphs(text);
-  const quoteText = segs[0];
-  const sourceText = segs[1] ?? '';
 
   const maxWidth = width - pad * 2;
   const kickerSize = 22 * scale;
-  const srcSize = 20 * scale;
 
-  // 预留顶部 kicker、底部来源行（发丝线 + 文字）
+  // 预留顶部 kicker、底部发丝线装饰带
   const topReserve = kickerSize * 2.6;
-  const bottomReserve = srcSize * 3.2;
+  const bottomReserve = kickerSize * 1.8;
   const areaTop = pad + topReserve;
   const areaBottom = height - pad - bottomReserve;
   const areaH = Math.max(60 * scale, areaBottom - areaTop);
@@ -38,12 +36,12 @@ export function drawPullQuote(rc: RenderContext, text: string, params: EffectPar
   const quoteMax = clamp(params.titleSize, 44, 120) * scale;
   const fit = fitTextBlock(
     ctx,
-    [quoteText],
+    segs,
     maxWidth,
     areaH,
     rc.fontFamily,
     (s) => weightForSize(s / scale, rc.fontKind),
-    { lineHeightRatio: 1.22, min: 28 * scale, max: quoteMax, letterRatio: 0.04 },
+    { lineHeightRatio: 1.24, min: 28 * scale, max: quoteMax, letterRatio: 0.04 },
   );
 
   // 顶部 kicker
@@ -77,32 +75,13 @@ export function drawPullQuote(rc: RenderContext, text: string, params: EffectPar
     y += fit.lineHeight;
   }
 
-  // 底部来源行（发丝线 + mono）
-  const srcY = height - pad - srcSize;
+  // 底部发丝线装饰（固定，不占内容）
   drawHairline(
     ctx,
     width / 2 - maxWidth * 0.18,
-    srcY - srcSize * 1.3,
+    height - pad - kickerSize * 0.8,
     maxWidth * 0.36,
     rc.accent,
     Math.max(1, scale),
   );
-  if (sourceText) {
-    drawLine(
-      ctx,
-      sourceText,
-      width / 2,
-      srcY,
-      {
-        size: srcSize,
-        weight: 500,
-        family: MONO_STACK,
-        color: rc.fontColor,
-        letterSpacing: srcSize * 0.16,
-        alpha: 0.82,
-        uppercase: true,
-      },
-      'center',
-    );
-  }
 }
