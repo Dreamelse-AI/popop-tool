@@ -152,8 +152,10 @@ export interface SaveMoodPicResult {
 }
 
 /**
- * 把一张已出图的资产登记到图库（arca /moodpic/save）。
- * image 用 TOSObject 结构透传，仅填 url（后端按 url 落库）；bucket/object_key 留空。
+ * 把一张已出图的资产登记到图库。
+ * 对应 arca.api: POST /moodpic/save（MoodpicSaveReq，无鉴权，平台侧内部接口）
+ * 请求 snake_case 扁平字段：image_url 必填，其余 optional；
+ * 后端负责下载该 url 并转存到自有 OSS 桶（moodpic/ 前缀）。
  */
 export async function saveMoodPic(
   input: SaveMoodPicInput,
@@ -161,7 +163,7 @@ export async function saveMoodPic(
 ): Promise<SaveMoodPicResult> {
   const data = await arcaPost<
     {
-      image: ArcaTosObject;
+      image_url: string;
       prompt: string;
       config_json: string;
       ratio: string;
@@ -171,7 +173,7 @@ export async function saveMoodPic(
   >(
     '/moodpic/save',
     {
-      image: { object_type: 'image', url: input.imageUrl },
+      image_url: input.imageUrl,
       prompt: input.prompt,
       config_json: JSON.stringify(input.config),
       ratio: input.ratio,
