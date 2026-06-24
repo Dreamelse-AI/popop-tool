@@ -248,9 +248,6 @@ export function VisualAssetPage() {
                           {item.archiveStatus === 'archived' && (
                             <span className="text-[10px] text-ok" title="已永久存储到图库">已存档</span>
                           )}
-                          {item.archiveStatus === 'skipped' && (
-                            <span className="text-[10px] text-ink-3" title="服务端未配置 OSS，未永久化">未存档</span>
-                          )}
                           {item.archiveStatus === 'archive-error' && (
                             <button
                               type="button"

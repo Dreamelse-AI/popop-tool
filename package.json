@@ -19,7 +19,6 @@
   },
   "dependencies": {
     "@imgly/background-removal": "^1.7.0",
-    "ali-oss": "^6.23.0",
     "express": "^5.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -33,7 +32,6 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.10",
-    "@types/ali-oss": "^6.23.3",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.0",
     "@types/react": "^19.1.8",

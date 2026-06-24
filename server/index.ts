@@ -17,7 +17,6 @@ import express from 'express';
 import { createApimartProxy } from './apimartProxy';
 import { createArcaProxy } from './arcaProxy';
 import { createAuthMiddleware } from './auth';
-import { handleUpload, type UploadRequestBody } from './moodpicRoute';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,18 +43,6 @@ app.use('/apimart', createApimartProxy());
 // arca 代理：转发 /arca/* 到 arca 海外后端（图库等接口）
 app.use('/arca', createArcaProxy());
 
-// MoodPic 写链路：拉 apimart 图 → 传 OSS → 登记 arca。需 JSON body 解析。
-app.post('/api/moodpic/upload', express.json({ limit: '1mb' }), async (req, res) => {
-  try {
-    const result = await handleUpload(req.body as UploadRequestBody);
-    res.status(200).json(result);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : '上传失败';
-    console.error('[moodpic] 上传失败:', message);
-    res.status(500).json({ error: message });
-  }
-});
-
 // 托管前端静态产物
 const distPath = path.join(__dirname, '..');
 const indexHtml = path.join(distPath, 'index.html');
@@ -63,8 +50,8 @@ const hasFrontend = fs.existsSync(indexHtml);
 
 if (hasFrontend) {
   app.use(express.static(distPath, { index: false }));
-  // SPA 回退：非 /apimart、/arca、/api、/health 的路由都回 index.html
-  app.get(/^\/(?!apimart\/|arca\/|api\/|health).*/, (_req, res) => {
+  // SPA 回退：非 /apimart、/arca、/health 的路由都回 index.html
+  app.get(/^\/(?!apimart\/|arca\/|health).*/, (_req, res) => {
     res.sendFile(indexHtml);
   });
 } else {

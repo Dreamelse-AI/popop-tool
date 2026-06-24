@@ -8,7 +8,7 @@ import type {
 import { generateConfigs } from '@/services/visualAssetEngine';
 import { expandToPrompt } from '@/services/promptExpander';
 import { generateImageByPrompt, ImageGenError } from '@/services/imageClient';
-import { uploadMoodPic } from '@/services/moodpicGallery';
+import { saveMoodPic } from '@/services/moodpicGallery';
 import { useCustomStyleStore } from './customStyleStore';
 
 /** 批量生成的并发上限（小并发，避免打爆 apimart）。 */
@@ -204,7 +204,7 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
       }));
     }
   },
-  // [ARCHIVE] 出图后自动存档：服务端拉图 → 传 OSS → 登记 arca
+  // [ARCHIVE] 出图后自动存档：前端直接调 arca /moodpic/save 登记图片 url
   archiveItem: async (id) => {
     const item = get().items.find((it) => it.id === id);
     if (!item || item.status !== 'done' || !item.url || item.savedAssetId) return;
@@ -217,7 +217,7 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
     }));
 
     try {
-      const result = await uploadMoodPic({
+      const result = await saveMoodPic({
         imageUrl: item.url,
         prompt: item.prompt,
         config: item.config,
@@ -227,11 +227,7 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
       set((s) => ({
         items: s.items.map((it) =>
           it.id === id
-            ? {
-                ...it,
-                archiveStatus: result.skipped ? 'skipped' : 'archived',
-                savedAssetId: result.assetId,
-              }
+            ? { ...it, archiveStatus: 'archived', savedAssetId: result.assetId }
             : it,
         ),
       }));
