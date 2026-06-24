@@ -234,12 +234,22 @@ function firstImageUrl(json: TaskStatusResponse): string | null {
 
 /** 安全读取错误响应里的 message（截断，避免过长）。 */
 async function safeErrorMessage(res: Response): Promise<string> {
+  // 先读纯文本：body 只能消费一次，文本能兼容 JSON / HTML 网关错误页 / 纯文本
+  let text = '';
   try {
-    const json = (await res.json()) as { error?: { message?: string } };
-    return (json.error?.message ?? '').slice(0, 200);
+    text = await res.text();
   } catch {
     return '';
   }
+  if (!text) return '';
+  try {
+    const json = JSON.parse(text) as { error?: { message?: string }; message?: string };
+    const msg = json.error?.message ?? json.message ?? '';
+    if (msg) return msg.slice(0, 200);
+  } catch {
+    // 非 JSON：回退展示原始响应前若干字符，便于定位网关/上游真实报错
+  }
+  return text.replace(/\s+/g, ' ').trim().slice(0, 200);
 }
 
 /**

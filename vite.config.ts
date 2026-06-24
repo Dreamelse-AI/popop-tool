@@ -1,8 +1,50 @@
 import { defineConfig, loadEnv } from 'vite';
+import type { PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 import { HttpsProxyAgent } from 'https-proxy-agent';
+
+/**
+ * dev 环境挂图片只读代理中间件（生产由 Express 承担），复用 server/imageProxy。
+ * 表情包 canvas 切图/抠图要读跨域图片像素，经同源代理规避 CORS。
+ */
+function imageProxyPlugin(): PluginOption {
+  return {
+    name: 'image-proxy-dev',
+    configureServer(server) {
+      server.middlewares.use('/api/img-proxy', async (req, res) => {
+        try {
+          const { createImageProxy } = await server.ssrLoadModule('/server/imageProxy.ts');
+          const handler = createImageProxy();
+          // 解析 query.url（中间件里 req.url 含 querystring）
+          const u = new URL(req.url ?? '', 'http://localhost');
+          const expressLike = Object.assign(req, {
+            query: { url: u.searchParams.get('url') ?? '' },
+          });
+          const resLike = Object.assign(res, {
+            status(code: number) {
+              res.statusCode = code;
+              return resLike;
+            },
+            json(body: unknown) {
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(body));
+              return resLike;
+            },
+            setHeader: res.setHeader.bind(res),
+          });
+          handler(expressLike as never, resLike as never);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : '取图失败';
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: message }));
+        }
+      });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   // 读取 .env 里的密钥，仅在 dev server 进程内使用，绝不暴露给前端 bundle
@@ -16,7 +58,7 @@ export default defineConfig(({ mode }) => {
   const arcaOrigin = env.ARCA_ORIGIN ?? 'https://i18n-api.imaginewithu.com';
 
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), imageProxyPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, 'src'),
