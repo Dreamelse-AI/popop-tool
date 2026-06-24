@@ -14,9 +14,15 @@ import type {
   MoodPicListResult,
   SaveMoodPicInput,
 } from '@/types/moodpic';
+import type { AssetConfig } from '@/types/visualAsset';
+import { arcaPost } from './arcaClient';
 
-/** 后端图库接口是否就绪。后端联调时置 false。 */
-const USE_MOCK = true;
+/**
+ * 接入开关：
+ *   - 读链路（list / batchDelete）已接 arca 真实接口（后端豁免 JWT 后可联调）
+ *   - 写链路（save）仍走本地，因线上压缩+直传 OSS 链路暂未封装（产品决定后续再做）
+ */
+const READ_VIA_ARCA = true;
 
 // [LOCAL_STORE]
 /**
@@ -48,57 +54,101 @@ export async function listMoodPics(
   page: number,
   pageSize: number,
 ): Promise<MoodPicListResult> {
-  if (USE_MOCK) {
-    const all = readLocal();
-    const start = (page - 1) * pageSize;
-    return {
-      items: all.slice(start, start + pageSize),
-      total: all.length,
-    };
-  }
-  return listViaArca(page, pageSize);
+  if (READ_VIA_ARCA) return listViaArca(page, pageSize);
+  const all = readLocal();
+  const start = (page - 1) * pageSize;
+  return {
+    items: all.slice(start, start + pageSize),
+    total: all.length,
+  };
 }
 
-/** 批量删除（删 OSS 对象 + 库记录由后端完成）。 */
+/** 批量删除（软删库记录 + 异步清理 OSS 对象，由后端完成）。 */
 export async function batchDeleteMoodPics(assetIds: string[]): Promise<void> {
-  if (USE_MOCK) {
-    const idSet = new Set(assetIds);
-    writeLocal(readLocal().filter((a) => !idSet.has(a.assetId)));
-    return;
-  }
-  return batchDeleteViaArca(assetIds);
+  if (READ_VIA_ARCA) return batchDeleteViaArca(assetIds);
+  const idSet = new Set(assetIds);
+  writeLocal(readLocal().filter((a) => !idSet.has(a.assetId)));
 }
 
-/** 保存一条资产（前端已上传 OSS 后调用）。 */
+/**
+ * 保存一条资产。写链路（压缩 + 直传 OSS + /moodpic/save）暂未封装，
+ * 当前仍写本地 localStorage；线上链路就绪后改走 saveViaArca。
+ */
 export async function saveMoodPic(input: SaveMoodPicInput): Promise<MoodPicAsset> {
-  if (USE_MOCK) {
-    const asset: MoodPicAsset = {
-      assetId: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      url: input.url,
-      prompt: input.prompt,
-      config: input.config,
-      ratio: input.ratio,
-      resolution: input.resolution,
-      createdAt: new Date().toISOString(),
-    };
-    writeLocal([asset, ...readLocal()]);
-    return asset;
+  const asset: MoodPicAsset = {
+    assetId: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    url: input.url,
+    prompt: input.prompt,
+    config: input.config,
+    ratio: input.ratio,
+    resolution: input.resolution,
+    createdAt: new Date().toISOString(),
+  };
+  writeLocal([asset, ...readLocal()]);
+  return asset;
+}
+
+// [ARCA_IMPL] 对齐 arca.api（dev 分支 MoodPic 模块）字段，snake_case。
+
+/** arca 契约：MoodpicAssetItem（部分字段透传）。 */
+interface ArcaTosObject {
+  bucket_name?: string;
+  object_key?: string;
+  object_type?: string;
+  url?: string;
+}
+interface ArcaMoodpicItem {
+  asset_id: string;
+  image: ArcaTosObject;
+  prompt: string;
+  config_json: string;
+  ratio: string;
+  resolution: string;
+  created_at: number; // unix 毫秒
+}
+interface ArcaMoodpicListResp {
+  items: ArcaMoodpicItem[] | null;
+  total: number;
+}
+
+/** 安全解析 config_json；失败给一个最小可用的占位配置。 */
+function parseConfig(configJson: string): AssetConfig {
+  try {
+    return JSON.parse(configJson) as AssetConfig;
+  } catch {
+    return { emotion: '', subject: 'none', type: 'abstract', style: '', dna: {} };
   }
-  return saveViaArca(input);
 }
 
-// [ARCA_IMPL] 后端定稿后实现：复用 arcaPost，对齐 arca.api 字段（snake_case）。
-async function listViaArca(_page: number, _pageSize: number): Promise<MoodPicListResult> {
-  // 例：const data = await arcaPost('/moodpic/list', { page, page_size: pageSize });
-  throw new Error('图库列表接口尚未接入 arca');
+/** 契约 item → 前端 MoodPicAsset。 */
+function toAsset(it: ArcaMoodpicItem): MoodPicAsset {
+  return {
+    assetId: it.asset_id,
+    url: it.image?.url ?? '',
+    prompt: it.prompt,
+    config: parseConfig(it.config_json),
+    ratio: it.ratio,
+    resolution: it.resolution,
+    createdAt: new Date(it.created_at).toISOString(),
+  };
 }
 
-async function batchDeleteViaArca(_assetIds: string[]): Promise<void> {
-  // 例：await arcaPost('/moodpic/batch_delete', { asset_ids: assetIds });
-  throw new Error('图库批量删除接口尚未接入 arca');
+/** POST /moodpic/list —— 分页列出当前用户图库（按创建时间倒序）。 */
+async function listViaArca(page: number, pageSize: number): Promise<MoodPicListResult> {
+  const data = await arcaPost<{ page: number; page_size: number }, ArcaMoodpicListResp>(
+    '/moodpic/list',
+    { page, page_size: pageSize },
+  );
+  return {
+    items: (data.items ?? []).map(toAsset),
+    total: data.total ?? 0,
+  };
 }
 
-async function saveViaArca(_input: SaveMoodPicInput): Promise<MoodPicAsset> {
-  // 例：const data = await arcaPost('/moodpic/save', { image, prompt, config_json, ratio, resolution });
-  throw new Error('图库保存接口尚未接入 arca');
+/** POST /moodpic/batch_delete —— 批量删除（软删 + 异步清 OSS）。 */
+async function batchDeleteViaArca(assetIds: string[]): Promise<void> {
+  await arcaPost<{ asset_ids: string[] }, Record<string, never>>(
+    '/moodpic/batch_delete',
+    { asset_ids: assetIds },
+  );
 }

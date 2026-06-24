@@ -12,6 +12,8 @@ export default defineConfig(({ mode }) => {
   // 可选上游代理：本机科学上网端口。配了就让转发请求经它出网
   const upstreamProxy = env.UPSTREAM_PROXY ?? '';
   const proxyAgent = upstreamProxy ? new HttpsProxyAgent(upstreamProxy) : undefined;
+  // arca 海外后端域名（图库等接口），dev 走 vite proxy 规避 CORS
+  const arcaOrigin = env.ARCA_ORIGIN ?? 'https://i18n-api.imaginewithu.com';
 
   return {
     plugins: [react(), tailwindcss()],
@@ -57,6 +59,31 @@ export default defineConfig(({ mode }) => {
                 proxyRes.on('end', () => {
                   console.error(
                     `[apimart] 上游 ${status} ${req.url}\n上游响应: ${body.slice(0, 800) || '(空 body)'}`,
+                  );
+                });
+              }
+            });
+          },
+        },
+        // arca 海外后端代理：转发 /arca/* 到 arca，规避 CORS
+        '/arca': {
+          target: arcaOrigin,
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/arca/, ''),
+          configure: (proxy) => {
+            proxy.on('error', (err) => {
+              console.error('[arca] 转发失败:', err.message);
+            });
+            proxy.on('proxyRes', (proxyRes, req) => {
+              const status = proxyRes.statusCode ?? 0;
+              if (status >= 400) {
+                let body = '';
+                proxyRes.on('data', (chunk) => {
+                  body += chunk.toString();
+                });
+                proxyRes.on('end', () => {
+                  console.error(
+                    `[arca] 上游 ${status} ${req.url}\n上游响应: ${body.slice(0, 800) || '(空 body)'}`,
                   );
                 });
               }

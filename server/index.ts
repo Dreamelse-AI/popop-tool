@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { createApimartProxy } from './apimartProxy';
+import { createArcaProxy } from './arcaProxy';
 import { createAuthMiddleware } from './auth';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -23,6 +24,7 @@ const __dirname = path.dirname(__filename);
 const PORT = Number(process.env.PORT) || 3000;
 const APIMART_API_KEY = process.env.APIMART_API_KEY ?? '';
 const APIMART_API_TARGET = process.env.APIMART_API_TARGET ?? 'https://api.apimart.ai';
+const ARCA_ORIGIN = process.env.ARCA_ORIGIN ?? 'https://i18n-api.imaginewithu.com';
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN ?? '';
 
 const app = express();
@@ -38,6 +40,9 @@ app.get('/health', (_req, res) => {
 // apimart 代理：转发 /apimart/* 并注入 Authorization 头
 app.use('/apimart', createApimartProxy());
 
+// arca 代理：转发 /arca/* 到 arca 海外后端（图库等接口）
+app.use('/arca', createArcaProxy());
+
 // 托管前端静态产物
 const distPath = path.join(__dirname, '..');
 const indexHtml = path.join(distPath, 'index.html');
@@ -45,17 +50,18 @@ const hasFrontend = fs.existsSync(indexHtml);
 
 if (hasFrontend) {
   app.use(express.static(distPath, { index: false }));
-  // SPA 回退：非 /apimart、非 /health 的路由都回 index.html
-  app.get(/^\/(?!apimart\/|health).*/, (_req, res) => {
+  // SPA 回退：非 /apimart、/arca、/health 的路由都回 index.html
+  app.get(/^\/(?!apimart\/|arca\/|health).*/, (_req, res) => {
     res.sendFile(indexHtml);
   });
 } else {
-  console.warn('[server] 未找到前端产物 index.html，仅提供 /apimart 与 /health');
+  console.warn('[server] 未找到前端产物 index.html，仅提供 /apimart、/arca 与 /health');
 }
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`[server] 已启动 http://0.0.0.0:${PORT}`);
   console.log(`[server] apimart 目标：${APIMART_API_TARGET}`);
+  console.log(`[server] arca 目标：${ARCA_ORIGIN}`);
   console.log(`[server] apimart key：${APIMART_API_KEY ? '已配置' : '未配置（生成会 401）'}`);
   console.log(`[server] 访问鉴权：${ACCESS_TOKEN ? '已开启（需 ?token= 或 cookie）' : '未开启（建议生产配置 ACCESS_TOKEN）'}`);
 });

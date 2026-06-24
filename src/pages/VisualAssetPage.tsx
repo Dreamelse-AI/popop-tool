@@ -15,7 +15,7 @@ import { downloadImage } from '@/features/background/downloadImage';
 import { ToolHeader } from '@/components/ToolHeader';
 import { Lightbox } from '@/components/Lightbox';
 import { ResultPanel } from '@/components/ResultPanel';
-import { IconDownload, IconSave } from '@/components/icons';
+import { IconDownload } from '@/components/icons';
 
 const RATIOS: AspectRatio[] = ['9:16', '3:4', '2:3', '1:1', '3:2', '4:3', '16:9'];
 const RESOLUTIONS: Resolution[] = ['1k', '2k', '4k'];
@@ -36,8 +36,6 @@ export function VisualAssetPage() {
     setResolution,
     generate,
     retryItem,
-    saveItem,
-    saveAllDone,
     cancel,
   } = useVisualAssetStore();
 
@@ -198,9 +196,6 @@ export function VisualAssetPage() {
             <div className="flex flex-col gap-3">
               {doneItems.length > 0 && (
                 <div className="flex items-center justify-end gap-3">
-                  <button type="button" onClick={() => void saveAllDone()} className="pop-link">
-                    全部存入图库
-                  </button>
                   <button type="button" onClick={handleDownloadAll} className="pop-link">
                     批量下载（{doneItems.length}）
                   </button>
@@ -246,16 +241,6 @@ export function VisualAssetPage() {
                       </button>
                       {item.status === 'done' && item.url && (
                         <div className="flex shrink-0 items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => void saveItem(item.id)}
-                            disabled={!!item.savedAssetId}
-                            className="text-ink-3 transition hover:text-ink disabled:text-ok"
-                            title={item.savedAssetId ? '已存入图库' : '存入图库'}
-                            aria-label="存入图库"
-                          >
-                            <IconSave />
-                          </button>
                           <button
                             type="button"
                             onClick={() => handleDownload(item.url!, item.id)}
