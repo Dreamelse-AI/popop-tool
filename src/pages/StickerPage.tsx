@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { MattingMode } from '@/types/sticker';
 import { useStickerStore } from '@/features/sticker/store';
 import { PromptManager } from '@/features/sticker/PromptManager';
+import { PromptSkeletonFields } from '@/features/sticker/PromptSkeletonFields';
 import { EmotionManager } from '@/features/sticker/EmotionManager';
 import { ReferenceUploader } from '@/features/sticker/ReferenceUploader';
 import { downloadImage } from '@/features/background/downloadImage';
@@ -79,6 +80,8 @@ export function StickerPage() {
           />
 
           <PromptManager value={prompt} onChange={setPrompt} />
+
+          <PromptSkeletonFields />
 
           <EmotionManager />
           {/* [CONTROLS] */}

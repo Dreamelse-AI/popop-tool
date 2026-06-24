@@ -1,9 +1,5 @@
 import { useState } from 'react';
 import { useStickerPromptStore } from './promptStore';
-import { useEmotionStore } from './emotionStore';
-import { useStickerStore } from './store';
-import { buildStickerPrompt } from '@/services/stickerPromptBuilder';
-import { STICKER_COUNT } from '@/types/sticker';
 
 interface PromptManagerProps {
   /** 当前提示词正文（受控） */
@@ -25,16 +21,6 @@ export function PromptManager({ value, onChange }: PromptManagerProps) {
   const [name, setName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showFull, setShowFull] = useState(false);
-
-  const emotions = useEmotionStore((s) => s.emotions);
-  const matting = useStickerStore((s) => s.matting);
-  // 实时拼出最终送去出图的完整 prompt（与 store.generate 中一致），供用户审阅
-  const fullPrompt = buildStickerPrompt(
-    value || '（在上方填写主题/风格后这里会更新）',
-    emotions.slice(0, STICKER_COUNT),
-    matting,
-  );
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -103,36 +89,6 @@ export function PromptManager({ value, onChange }: PromptManagerProps) {
         rows={5}
         className="pop-textarea resize-y"
       />
-
-      <div className="mt-2 rounded-pop border-2 border-dashed border-cream-line p-2">
-        <button
-          type="button"
-          onClick={() => setShowFull((v) => !v)}
-          className="flex w-full items-center justify-between text-xs font-semibold text-ink-2"
-        >
-          <span>完整提示词预览（含九宫格骨架 / 情绪 / 背景，实际送去出图的内容）</span>
-          <span className="text-ink-3">{showFull ? '收起 ▲' : '展开 ▼'}</span>
-        </button>
-        {showFull && (
-          <>
-            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-pop border border-cream-line bg-code-bg p-2 font-mono text-[11px] leading-relaxed text-ink-2">
-              {fullPrompt}
-            </pre>
-            <div className="mt-1.5 flex items-center justify-between">
-              <span className="text-[11px] text-ink-3">
-                上方输入框只写主题/风格段，其余骨架由系统自动拼接；情绪在「表情情绪」里改。
-              </span>
-              <button
-                type="button"
-                onClick={() => void navigator.clipboard?.writeText(fullPrompt)}
-                className="pop-link shrink-0"
-              >
-                复制
-              </button>
-            </div>
-          </>
-        )}
-      </div>
 
       <div className="mt-2 flex items-center gap-2">
         <input
