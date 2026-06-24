@@ -39,7 +39,7 @@ export function buildStickerPrompt(
 
   if (matting === 'colorKey') {
     lines.push(
-      'Use a clean, flat, uniform light solid-color background with clear contrast against the character, no gradients, no shadows, no extra decorations, so the subject can be cleanly cut out.',
+      'Use a clean, flat, uniform medium-gray solid background with clear contrast against the character, no gradients, no shadows, no extra decorations, so the subject can be cleanly cut out.',
     );
   }
 
