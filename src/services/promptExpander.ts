@@ -110,6 +110,8 @@ async function expandViaApimart(
         { role: 'user', content: userContent },
       ],
       temperature: 0.8,
+      // 显式关闭流式：部分模型默认返回 SSE（data: {...}），按纯 JSON 解析会失败
+      stream: false,
     }),
     signal,
   });
@@ -119,14 +121,58 @@ async function expandViaApimart(
     throw new Error(detail || `扩写请求失败（${res.status}）`);
   }
 
-  const json = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-    error?: { message?: string };
-  };
-  const text = json.choices?.[0]?.message?.content?.trim();
-  if (!text) throw new Error(json.error?.message || '扩写返回为空');
+  // 兼容两种响应：标准 JSON 与 SSE 流（text/event-stream）
+  const raw = await res.text();
+  const text = parseCompletionText(raw);
+  if (!text) throw new Error('扩写返回为空');
   // 去掉可能的首尾引号与多余换行
   return text.replace(/^["'\s]+|["'\s]+$/g, '').replace(/\s*\n\s*/g, ', ');
+}
+
+/** chat/completions 响应体（OpenAI 兼容）。 */
+interface ChatCompletionChunk {
+  choices?: Array<{
+    message?: { content?: string };
+    delta?: { content?: string };
+  }>;
+  error?: { message?: string };
+}
+
+/**
+ * 从响应文本里取出补全内容，兼容：
+ *   1. 标准 JSON：{ choices:[{ message:{ content } }] }
+ *   2. SSE 流：多行 `data: {...}`，content 在 choices[].delta.content，以 `data: [DONE]` 结束
+ */
+function parseCompletionText(raw: string): string {
+  const trimmed = raw.trim();
+  // 先按标准 JSON 尝试
+  if (trimmed.startsWith('{')) {
+    try {
+      const json = JSON.parse(trimmed) as ChatCompletionChunk;
+      const t = json.choices?.[0]?.message?.content?.trim();
+      if (t) return t;
+      if (json.error?.message) throw new Error(json.error.message);
+    } catch {
+      // 落到 SSE 解析
+    }
+  }
+  // SSE：拼接所有 data 行里的 delta.content / message.content
+  let acc = '';
+  for (const line of trimmed.split('\n')) {
+    const s = line.trim();
+    if (!s.startsWith('data:')) continue;
+    const payload = s.slice(5).trim();
+    if (!payload || payload === '[DONE]') continue;
+    try {
+      const chunk = JSON.parse(payload) as ChatCompletionChunk;
+      const piece =
+        chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.message?.content ?? '';
+      acc += piece;
+    } catch {
+      // 跳过无法解析的行
+    }
+  }
+  return acc.trim();
 }
 
 /** 安全读取错误响应里的 message。 */

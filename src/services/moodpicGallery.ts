@@ -134,11 +134,11 @@ async function batchDeleteViaArca(assetIds: string[]): Promise<void> {
   );
 }
 
-// [UPLOAD_CHAIN] 出图后自动写链路：调本服务端 /api/moodpic/upload
-// （服务端拉 apimart 图字节 → 传 OSS → 登记 arca /moodpic/save）。
+// [SAVE_CHAIN] 出图后存档：前端直接调 arca /moodpic/save 登记图片 url。
+// apimart 出图已返回可访问 url，直接存该 url，不再走服务端拉图/OSS 中转。
 
-/** 写链路入参（前端拿到 apimart 直链后调用）。 */
-export interface UploadMoodPicInput {
+/** 存档入参（前端拿到 apimart 直链后调用）。 */
+export interface SaveMoodPicInput {
   imageUrl: string;
   prompt: string;
   config: AssetConfig;
@@ -146,42 +146,38 @@ export interface UploadMoodPicInput {
   resolution: string;
 }
 
-/** 写链路结果。skipped=true 表示服务端未配 OSS，前端回退本地暂存。 */
-export interface UploadMoodPicResult {
-  skipped?: boolean;
-  assetId?: string;
-  url?: string;
+/** 存档结果。 */
+export interface SaveMoodPicResult {
+  assetId: string;
 }
 
 /**
- * 把一张已出图的资产存档（永久化）。
- * 由服务端完成「拉图 → 传 OSS → 登记 arca」，前端不接触任何密钥、也不受 CORS 限制。
+ * 把一张已出图的资产登记到图库（arca /moodpic/save）。
+ * image 用 TOSObject 结构透传，仅填 url（后端按 url 落库）；bucket/object_key 留空。
  */
-export async function uploadMoodPic(
-  input: UploadMoodPicInput,
+export async function saveMoodPic(
+  input: SaveMoodPicInput,
   signal?: AbortSignal,
-): Promise<UploadMoodPicResult> {
-  const res = await fetch('/api/moodpic/upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      imageUrl: input.imageUrl,
+): Promise<SaveMoodPicResult> {
+  const data = await arcaPost<
+    {
+      image: ArcaTosObject;
+      prompt: string;
+      config_json: string;
+      ratio: string;
+      resolution: string;
+    },
+    { asset_id?: string }
+  >(
+    '/moodpic/save',
+    {
+      image: { object_type: 'image', url: input.imageUrl },
       prompt: input.prompt,
-      configJson: JSON.stringify(input.config),
+      config_json: JSON.stringify(input.config),
       ratio: input.ratio,
       resolution: input.resolution,
-    }),
+    },
     signal,
-  });
-  if (!res.ok) {
-    let message = `存档失败（${res.status}）`;
-    try {
-      const j = (await res.json()) as { error?: string };
-      if (j.error) message = j.error;
-    } catch {
-      // 忽略解析失败，用默认文案
-    }
-    throw new Error(message);
-  }
-  return (await res.json()) as UploadMoodPicResult;
+  );
+  return { assetId: data.asset_id ?? '' };
 }
