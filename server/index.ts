@@ -18,6 +18,7 @@ import { createApimartProxy } from './apimartProxy';
 import { createArcaProxy } from './arcaProxy';
 import { createImageProxy } from './imageProxy';
 import { createAuthMiddleware } from './auth';
+import { handleCoverUpload } from './coverUploadHandler';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,6 +47,11 @@ app.use('/arca', createArcaProxy());
 
 // 图片只读代理：表情包 canvas 切图/抠图需读跨域图片像素，经此同源代取规避 CORS
 app.get('/api/img-proxy', createImageProxy());
+
+// 画风封面图上传：前端发 base64，服务端用 OSS SDK 直传，返回可访问 URL
+app.post('/api/style-cover/upload', (req, res) => {
+  void handleCoverUpload(req, res);
+});
 
 // 托管前端静态产物
 const distPath = path.join(__dirname, '..');
