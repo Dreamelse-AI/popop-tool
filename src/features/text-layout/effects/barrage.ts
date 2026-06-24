@@ -19,7 +19,8 @@ export function drawBarrage(rc: RenderContext, text: string, params: EffectParam
   const scatter = params.spread / 100;
 
   const availableWidth = Math.max(80, width - pad * 2);
-  const rowGap = maxSize * 1.5;
+  const availableHeight = Math.max(80, height - pad * 2);
+  let rowGap = maxSize * 1.5;
 
   // 先按顺序切行：每行先定一个统一字号，按该字号算容量，装满再换行
   type Row = { chars: string[]; size: number; charGap: number };
@@ -34,12 +35,26 @@ export function drawBarrage(rc: RenderContext, text: string, params: EffectParam
     i += take;
   }
 
+  // 纵向自适应：行太多导致整体超高时，按比例统一缩小字号/行距，硬保证不溢出
+  let blockH = (rows.length - 1) * rowGap + maxSize;
+  let scaledMax = maxSize;
+  if (blockH > availableHeight) {
+    const k = availableHeight / blockH;
+    rowGap *= k;
+    scaledMax *= k;
+    rows.forEach((row) => {
+      row.size *= k;
+      row.charGap *= k;
+    });
+    blockH = availableHeight;
+  }
+
   // 行整体纵向居中
   const totalHeight = (rows.length - 1) * rowGap;
   const startY = clamp(
     height / 2 - totalHeight / 2,
-    pad + maxSize * 0.6,
-    height - pad - maxSize * 0.6,
+    pad + scaledMax * 0.6,
+    height - pad - scaledMax * 0.6,
   );
 
   rows.forEach((row, r) => {

@@ -4,9 +4,10 @@ import { getEffect } from '@/data/effectCatalog';
 import { getPalette } from '@/data/paletteLibrary';
 import { getImage } from '@/data/imageLibrary';
 import { mulberry32 } from '@/features/text-layout/effects/shared';
+import { FONT_STACKS } from '@/features/text-layout/typography';
 
-/** 默认字体族（配色库未指定字体时使用）。 */
-export const DEFAULT_FONT_FAMILY = '"Noto Serif SC", "Songti SC", serif';
+/** 默认字体族（配色库未指定字体时使用，serif 气质）。 */
+export const DEFAULT_FONT_FAMILY = FONT_STACKS.serif;
 
 /**
  * 数值参数的兜底默认值。区间未覆盖到的字段用它补齐，
@@ -22,6 +23,8 @@ export const DEFAULT_PARAMS: EffectParams = {
   tearLetterSpacing: 2,
   tearLineSpacing: 150,
   tearBlurRadius: 120,
+  titleSize: 96,
+  listLineSpacing: 150,
 };
 
 /** 数值型参数的键（可被区间随机覆盖的）。 */
@@ -68,9 +71,11 @@ export function resolveStyle(background: Background): RenderStyle {
     if (img) {
       return {
         fontFamily: DEFAULT_FONT_FAMILY,
+        fontKind: 'serif',
         // fontColor 缺省时先占位白字；真实判定在背景图加载完成后由 detectFontColor 覆盖
         fontColor: img.fontColor ?? '#FFFFFF',
         bgColor: '#000000',
+        accent: '#FFFFFF',
         bgImageUrl: img.url,
         overlay: img.overlay,
       };
@@ -81,8 +86,10 @@ export function resolveStyle(background: Background): RenderStyle {
   const paletteId = background.type === 'palette' ? background.paletteId : '';
   const palette = getPalette(paletteId);
   return {
-    fontFamily: DEFAULT_FONT_FAMILY,
+    fontFamily: FONT_STACKS[palette.font],
+    fontKind: palette.font,
     fontColor: palette.fontColor,
     bgColor: palette.bgColor,
+    accent: palette.accent ?? palette.fontColor,
   };
 }

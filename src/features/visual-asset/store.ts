@@ -8,7 +8,7 @@ import type {
 import { generateConfigs } from '@/services/visualAssetEngine';
 import { expandToPrompt } from '@/services/promptExpander';
 import { generateImageByPrompt, ImageGenError } from '@/services/imageClient';
-import { saveMoodPic } from '@/services/moodpicGallery';
+import { uploadMoodPic } from '@/services/moodpicGallery';
 import { useCustomStyleStore } from './customStyleStore';
 
 /** 批量生成的并发上限（小并发，避免打爆 apimart）。 */
@@ -39,10 +39,8 @@ interface VisualAssetState {
   generate: () => Promise<void>;
   /** 重试单条结果项（重新扩写并出图，配置不变） */
   retryItem: (id: string) => Promise<void>;
-  /** 把单条已完成结果存入图库 */
-  saveItem: (id: string) => Promise<void>;
-  /** 把所有已完成且未存过的结果存入图库 */
-  saveAllDone: () => Promise<void>;
+  /** 重试单条的自动存档（出图成功但存档失败时用） */
+  archiveItem: (id: string) => Promise<void>;
   cancel: () => void;
   reset: () => void;
 }
@@ -157,6 +155,8 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
             controller.signal,
           );
           update(item.id, { status: 'done', prompt, url: image.url });
+          // 出图成功后自动存档（永久化），失败不影响出图结果展示
+          void get().archiveItem(item.id);
         } catch (e) {
           if (e instanceof DOMException && e.name === 'AbortError') return;
           const msg =
@@ -195,6 +195,7 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
           it.id === id ? { ...it, status: 'done', prompt, url: image.url } : it,
         ),
       }));
+      void get().archiveItem(id);
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return;
       const msg = e instanceof ImageGenError ? e.message : e instanceof Error ? e.message : '生成失败';
@@ -203,27 +204,44 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
       }));
     }
   },
-  // [SAVE]
-  saveItem: async (id) => {
+  // [ARCHIVE] 出图后自动存档：服务端拉图 → 传 OSS → 登记 arca
+  archiveItem: async (id) => {
     const item = get().items.find((it) => it.id === id);
     if (!item || item.status !== 'done' || !item.url || item.savedAssetId) return;
-    const asset = await saveMoodPic({
-      url: item.url,
-      objectKey: '',
-      prompt: item.prompt,
-      config: item.config,
-      ratio: get().ratio,
-      resolution: get().resolution,
-    });
-    set((s) => ({
-      items: s.items.map((it) => (it.id === id ? { ...it, savedAssetId: asset.assetId } : it)),
-    }));
-  },
+    const { ratio, resolution } = get();
 
-  saveAllDone: async () => {
-    const targets = get().items.filter((it) => it.status === 'done' && it.url && !it.savedAssetId);
-    for (const it of targets) {
-      await get().saveItem(it.id);
+    set((s) => ({
+      items: s.items.map((it) =>
+        it.id === id ? { ...it, archiveStatus: 'archiving', archiveError: undefined } : it,
+      ),
+    }));
+
+    try {
+      const result = await uploadMoodPic({
+        imageUrl: item.url,
+        prompt: item.prompt,
+        config: item.config,
+        ratio,
+        resolution,
+      });
+      set((s) => ({
+        items: s.items.map((it) =>
+          it.id === id
+            ? {
+                ...it,
+                archiveStatus: result.skipped ? 'skipped' : 'archived',
+                savedAssetId: result.assetId,
+              }
+            : it,
+        ),
+      }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '存档失败';
+      set((s) => ({
+        items: s.items.map((it) =>
+          it.id === id ? { ...it, archiveStatus: 'archive-error', archiveError: msg } : it,
+        ),
+      }));
     }
   },
   // [CANCEL]
