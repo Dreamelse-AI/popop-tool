@@ -7,9 +7,19 @@
 
 import { STICKER_GRID } from '@/types/sticker';
 
+/**
+ * 把可能跨域的图片直链包成同源代理 URL，规避 CORS（apimart 出图直链所在 host 无 CORS 头，
+ * 前端直接 fetch 读像素会被拦截）。data:/blob: 与同源 URL 原样返回。
+ */
+export function toProxiedUrl(src: string): string {
+  if (src.startsWith('data:') || src.startsWith('blob:')) return src;
+  if (src.startsWith('/')) return src; // 已是同源相对路径
+  return `/api/img-proxy?url=${encodeURIComponent(src)}`;
+}
+
 /** 把图片直链加载成 ImageBitmap（先 fetch blob，规避 canvas 跨域污染）。 */
 async function loadBitmap(src: string, signal?: AbortSignal): Promise<ImageBitmap> {
-  const res = await fetch(src, { signal });
+  const res = await fetch(toProxiedUrl(src), { signal });
   if (!res.ok) throw new Error(`加载大图失败（${res.status}）`);
   const blob = await res.blob();
   return createImageBitmap(blob);
