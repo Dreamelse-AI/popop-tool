@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { MattingMode } from '@/types/sticker';
 import { useStickerStore } from '@/features/sticker/store';
 import { PromptManager } from '@/features/sticker/PromptManager';
+import { PromptSkeletonFields } from '@/features/sticker/PromptSkeletonFields';
 import { EmotionManager } from '@/features/sticker/EmotionManager';
 import { ReferenceUploader } from '@/features/sticker/ReferenceUploader';
 import { downloadImage } from '@/features/background/downloadImage';
@@ -11,14 +12,14 @@ import { ResultPanel } from '@/components/ResultPanel';
 import { IconDownload } from '@/components/icons';
 
 const MATTING_OPTIONS: { id: MattingMode; label: string }[] = [
-  { id: 'colorKey', label: '色键抠图（去背景）' },
+  { id: 'colorKey', label: 'AI 抠图（去背景）' },
   { id: 'none', label: '不抠图（保留背景）' },
 ];
 
 const STATUS_TEXT: Record<string, string> = {
   generating: '出图中（单次生成九宫格）…',
   slicing: '切图中…',
-  matting: '抠图中…',
+  matting: 'AI 抠图中（首次需下载模型，稍慢）…',
 };
 
 export function StickerPage() {
@@ -40,6 +41,18 @@ export function StickerPage() {
   } = useStickerStore();
 
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightboxTransparent, setLightboxTransparent] = useState(false);
+
+  /** 打开单个表情大图：抠过图的是透明 PNG，关掉描边框 */
+  const openItemLightbox = (dataUrl: string) => {
+    setLightboxTransparent(matting === 'colorKey');
+    setLightboxUrl(dataUrl);
+  };
+  /** 打开九宫格大图：始终带背景，用常规描边框 */
+  const openGridLightbox = (url: string) => {
+    setLightboxTransparent(false);
+    setLightboxUrl(url);
+  };
 
   const busy = status === 'generating' || status === 'slicing' || status === 'matting';
   const doneItems = items.filter((i) => i.status === 'done' && i.dataUrl);
@@ -68,6 +81,8 @@ export function StickerPage() {
 
           <PromptManager value={prompt} onChange={setPrompt} />
 
+          <PromptSkeletonFields />
+
           <EmotionManager />
           {/* [CONTROLS] */}
           <div className="pop-card flex flex-col gap-4">
@@ -87,7 +102,7 @@ export function StickerPage() {
               </div>
               {matting === 'colorKey' && (
                 <p className="mt-1.5 text-xs text-ink-3">
-                  会要求模型出纯绿背景，再按颜色阈值抠掉。发丝等细节可能抠不净，效果不满意可改用「不抠图」。
+                  用浏览器本地 AI 模型分割主体去背景，发丝级、无锯齿、不依赖背景色。首次使用会下载一次模型（稍慢），之后会缓存复用。
                 </p>
               )}
             </div>
@@ -129,7 +144,7 @@ export function StickerPage() {
                     批量下载（{doneItems.length}）
                   </button>
                   {gridUrl && (
-                    <button type="button" onClick={() => setLightboxUrl(gridUrl)} className="pop-link">
+                    <button type="button" onClick={() => openGridLightbox(gridUrl)} className="pop-link">
                       看九宫格大图
                     </button>
                   )}
@@ -155,7 +170,7 @@ export function StickerPage() {
                           src={item.dataUrl}
                           alt={`表情 ${item.index + 1}`}
                           className="h-full w-full cursor-zoom-in object-contain"
-                          onClick={() => setLightboxUrl(item.dataUrl!)}
+                          onClick={() => openItemLightbox(item.dataUrl!)}
                         />
                       ) : item.status === 'error' ? (
                         <span className="px-2 text-center text-xs text-err">{item.error}</span>
@@ -186,7 +201,7 @@ export function StickerPage() {
           )}
         </ResultPanel>
       </main>
-      <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+      <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} transparent={lightboxTransparent} />
     </div>
   );
 }

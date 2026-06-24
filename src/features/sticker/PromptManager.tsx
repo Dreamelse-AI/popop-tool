@@ -31,11 +31,15 @@ export function PromptManager({ value, onChange }: PromptManagerProps) {
       setError('提示词不能为空');
       return;
     }
-    const ok = editingId
-      ? updatePrompt(editingId, name, value)
+    // 仅当「正在编辑某预设」且「名称未被改过」时才更新原预设；
+    // 否则（新建，或改了名）一律按新建处理，避免误覆盖上一个预设
+    const editingTarget = editingId ? prompts.find((p) => p.id === editingId) : null;
+    const isUpdate = editingTarget != null && editingTarget.name.trim() === name.trim();
+    const ok = isUpdate
+      ? updatePrompt(editingId!, name, value)
       : addPrompt(name, value) !== null;
     if (!ok) {
-      setError('名称重复或内容无效');
+      setError(isUpdate ? '内容无效' : '名称重复或内容无效');
       return;
     }
     setName('');
@@ -103,7 +107,10 @@ export function PromptManager({ value, onChange }: PromptManagerProps) {
           onClick={handleSave}
           className="pop-btn-primary shrink-0 px-3 py-1.5 text-xs"
         >
-          {editingId ? '更新预设' : '保存预设'}
+          {editingId &&
+          prompts.find((p) => p.id === editingId)?.name.trim() === name.trim()
+            ? '更新预设'
+            : '保存为新预设'}
         </button>
       </div>
       {error ? (

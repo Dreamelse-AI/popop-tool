@@ -18,6 +18,7 @@ import { buildStickerPrompt } from '@/services/stickerPromptBuilder';
 import { sliceGrid } from '@/services/stickerSlicer';
 import { removeBackgroundByColorKey, DEFAULT_COLOR_KEY } from '@/services/stickerMatting';
 import { useEmotionStore } from './emotionStore';
+import { usePromptTemplateStore } from './promptTemplateStore';
 
 /**
  * 固定出图规格（不再让用户选，避免「全图比例 vs 单表情比例」语义混淆）：
@@ -119,7 +120,8 @@ export const useStickerStore = create<StickerState>((set, get) => ({
 
     try {
       // 1. 单次图生图，出一张九宫格大图
-      const fullPrompt = buildStickerPrompt(prompt, emotions, matting, colorKey);
+      const fields = usePromptTemplateStore.getState().fields;
+      const fullPrompt = buildStickerPrompt(prompt, emotions, matting, fields);
       const image = await generateImageByReference(
         fullPrompt,
         referenceImages,

@@ -1,60 +1,59 @@
 /**
  * 表情包九宫格 prompt 构造器。
  *
- * 把用户写的提示词（含风格/文案）包装成「保持人物一致 + 3×3 九宫格 + 纯色背景」的
- * 完整出图指令。纯色背景是为了后续色键抠图（见 stickerMatting）。
+ * 完整 prompt 由三部分拼装：
+ *   骨架字段（来自 promptTemplateStore，可逐字段改/恢复默认）
+ *   + 情绪段（来自 emotionStore，按九宫格顺序逐格注入）
+ *   + 主题/风格段（用户主输入框）。
+ *
+ * 去背景由浏览器端 ML 分割完成（见 stickerMatting），不依赖特定背景色。
  */
 
-import type { ColorKeyOptions, MattingMode, StickerEmotion } from '@/types/sticker';
+import type { MattingMode, StickerEmotion } from '@/types/sticker';
+import {
+  DEFAULT_FIELDS,
+  FIELD_ORDER,
+  type PromptFieldKey,
+} from '@/features/sticker/promptTemplateStore';
 
-/** rgb 转便于 prompt 描述的英文颜色短语。 */
-function describeBg(color: { r: number; g: number; b: number }): string {
-  const { r, g, b } = color;
-  if (g > 200 && r < 80 && b < 80) return 'pure chroma-key green (#00FF00)';
-  if (r > 200 && g < 80 && b < 80) return 'pure red';
-  if (b > 200 && r < 80 && g < 80) return 'pure blue';
-  if (r > 230 && g > 230 && b > 230) return 'pure white';
-  return `solid background color rgb(${r}, ${g}, ${b})`;
+/** 把情绪列表拼成一句逐格说明。 */
+function emotionLine(emotions: StickerEmotion[]): string {
+  if (emotions.length === 0) {
+    return 'Each cell shows the character with a different facial expression / emotion / pose.';
+  }
+  const list = emotions.map((e, i) => `cell ${i + 1}: ${e.en}`).join('; ');
+  return `Each cell shows the character with a distinct expression, in reading order (left to right, top to bottom): ${list}.`;
 }
 
 /**
  * 构造九宫格表情包 prompt。
- * @param userPrompt 用户写的提示词正文（风格/文案/表情描述）
+ * @param userPrompt 用户写的主题/风格段
  * @param emotions 九宫格各格的情绪（按行优先顺序）
- * @param matting 抠图模式（colorKey 时追加纯色背景要求）
- * @param colorKey 色键参数（决定背景色描述）
+ * @param matting 抠图模式（colorKey 时才注入 background 字段）
+ * @param fields 骨架字段（缺省用默认值，便于纯函数测试/预览）
  */
 export function buildStickerPrompt(
   userPrompt: string,
   emotions: StickerEmotion[],
   matting: MattingMode,
-  colorKey: ColorKeyOptions,
+  fields: Record<PromptFieldKey, string> = DEFAULT_FIELDS,
 ): string {
-  const lines = [
-    'Create a single square (1:1) image containing a 3x3 grid (9 cells) of expression stickers of the SAME character.',
-    'Keep the character identity, outfit, and art style strictly consistent across all 9 cells, matching the provided reference image.',
-    'Divide the canvas evenly into 3 rows and 3 columns of equal square cells, with clear separation and no overlap between cells.',
-    'In every cell, place the character centered with generous margin / padding around it, so each cell can be safely center-cropped to a 1:1 square without cutting off the character.',
-  ];
+  const lines: string[] = [];
 
-  if (emotions.length > 0) {
-    const list = emotions
-      .map((e, i) => `cell ${i + 1}: ${e.en}`)
-      .join('; ');
-    lines.push(
-      `Each cell shows the character with a distinct expression, in reading order (left to right, top to bottom): ${list}.`,
-    );
-  } else {
-    lines.push('Each cell shows the character with a different facial expression / emotion / pose.');
-  }
-
-  if (matting === 'colorKey') {
-    lines.push(
-      `Use a flat ${describeBg(colorKey.bgColor)} background filling every cell uniformly, no gradients, no shadows on the background, so the background can be removed by chroma keying.`,
-    );
+  for (const key of FIELD_ORDER) {
+    // background 字段仅在抠图模式下注入
+    if (key === 'background' && matting !== 'colorKey') continue;
+    const text = (fields[key] ?? DEFAULT_FIELDS[key]).trim();
+    if (!text) continue;
+    if (key === 'crop') {
+      // crop 之后紧跟情绪说明，语义更连贯
+      lines.push(text);
+      lines.push(emotionLine(emotions));
+    } else {
+      lines.push(text);
+    }
   }
 
   lines.push(`Sticker theme and style: ${userPrompt.trim()}`);
-
   return lines.join(' ');
 }

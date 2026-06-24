@@ -1,83 +1,86 @@
 /**
- * 色键抠图：把纯色背景的表情图去背景成透明 PNG（纯前端，零调用）。
+ * 表情图去背景：用浏览器端 ML 语义分割（@imgly/background-removal）抠图。
  *
- * 原理：生图时要求模型输出纯色背景（默认纯绿 chroma key），前端逐像素比对，
- * 与背景基准色的欧氏距离 ≤ 容差的像素 alpha 置 0（透明）。
- * 可选边缘羽化：对「接近阈值边界」的像素做 alpha 渐变，柔化硬边。
+ * 为什么换掉泛洪/色键：颜色阈值与泛洪填充是二值硬边，边缘必然锯齿，且依赖背景色、
+ * 抠不了发丝。imgly 在浏览器本地跑分割模型，输出平滑的 alpha matte（发丝级、无锯齿、
+ * 不依赖背景色），是 remove.bg 同类的成熟方案，零调用成本、图片不出本地。
  *
- * 局限（已知）：发丝、半透明边缘等细节抠不干净，这是色键法的固有限制；
- * 若效果不达标，再切到后端/ML 抠图方案（见对话中的方案）。
+ * 首次使用会按需下载模型（数 MB ~ 数十 MB），之后浏览器缓存复用。
  */
 
+import { removeBackground } from '@imgly/background-removal';
 import type { ColorKeyOptions } from '@/types/sticker';
 
-/** 把 data URL 加载成 ImageBitmap。 */
-async function loadBitmap(dataUrl: string): Promise<ImageBitmap> {
-  const res = await fetch(dataUrl);
-  const blob = await res.blob();
+/** Blob → ImageBitmap。 */
+async function blobToBitmap(blob: Blob): Promise<ImageBitmap> {
   return createImageBitmap(blob);
 }
 
-/** 颜色欧氏距离。 */
-function colorDistance(
-  r: number,
-  g: number,
-  b: number,
-  bg: { r: number; g: number; b: number },
-): number {
-  const dr = r - bg.r;
-  const dg = g - bg.g;
-  const db = b - bg.b;
-  return Math.sqrt(dr * dr + dg * dg + db * db);
+/**
+ * 边缘去白边（defringe）：消除抠图后半透明边缘残留的浅色描边。
+ *   1. alpha 低于 LOW 的像素直接清零（删掉若隐若现的浅色羽化）
+ *   2. 中间 alpha 像素做「除以 alpha」式的反预乘，抵消边缘被背景色污染的颜色偏移
+ *   3. 轻微收缩（erode）一圈半透明边界，去掉最外层 1px 杂边
+ */
+function defringe(blob: Blob): Promise<string> {
+  return blobToBitmap(blob).then((bitmap) => {
+    try {
+      const { width, height } = bitmap;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) throw new Error('无法创建画布上下文');
+      ctx.drawImage(bitmap, 0, 0);
+
+      const img = ctx.getImageData(0, 0, width, height);
+      const d = img.data;
+      const LOW = 32; // 低于此 alpha 视为杂边，清零
+      const HIGH = 224; // 高于此视为实心，不处理
+
+      for (let i = 0; i < d.length; i += 4) {
+        const a = d[i + 3];
+        if (a === 0) continue;
+        if (a < LOW) {
+          d[i + 3] = 0;
+          continue;
+        }
+        if (a < HIGH) {
+          // 反预乘去色边：把被浅背景染白的边缘像素颜色还原回实色
+          const inv = 255 / a;
+          d[i] = Math.min(255, d[i] * inv);
+          d[i + 1] = Math.min(255, d[i + 1] * inv);
+          d[i + 2] = Math.min(255, d[i + 2] * inv);
+        }
+      }
+
+      ctx.putImageData(img, 0, 0);
+      return canvas.toDataURL('image/png');
+    } finally {
+      bitmap.close();
+    }
+  });
 }
 
 /**
- * 对单张表情图做色键去背景，返回透明 PNG 的 data URL。
+ * 对单张表情图去背景，返回透明 PNG 的 data URL（含边缘去白边处理）。
+ *
+ * 注：保留 colorKey 入参签名是为了兼容调用方；ML 抠图不依赖背景色，参数实际不再使用。
  * @param dataUrl 输入图（已切好的单格 PNG）
- * @param opts 色键参数（背景色 / 容差 / 羽化）
  */
 export async function removeBackgroundByColorKey(
   dataUrl: string,
-  opts: ColorKeyOptions,
+  _opts?: ColorKeyOptions,
 ): Promise<string> {
-  const bitmap = await loadBitmap(dataUrl);
-  try {
-    const { width, height } = bitmap;
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) throw new Error('无法创建画布上下文');
-
-    ctx.drawImage(bitmap, 0, 0);
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-
-    const { bgColor, tolerance, feather } = opts;
-    // 羽化区间：[tolerance, tolerance+feather] 内线性过渡，避免一刀切的锯齿边
-    const featherEnd = tolerance + Math.max(0, feather);
-
-    for (let i = 0; i < data.length; i += 4) {
-      const dist = colorDistance(data[i], data[i + 1], data[i + 2], bgColor);
-      if (dist <= tolerance) {
-        data[i + 3] = 0; // 背景：全透明
-      } else if (feather > 0 && dist < featherEnd) {
-        // 边界过渡带：按距离线性提升 alpha
-        const ratio = (dist - tolerance) / (featherEnd - tolerance);
-        data[i + 3] = Math.round(data[i + 3] * ratio);
-      }
-    }
-
-    ctx.putImageData(imageData, 0, 0);
-    return canvas.toDataURL('image/png');
-  } finally {
-    bitmap.close();
-  }
+  const resultBlob = await removeBackground(dataUrl, {
+    output: { format: 'image/png' },
+  });
+  return defringe(resultBlob);
 }
 
-/** 默认色键参数：纯绿背景，中等容差，轻微羽化。 */
+/** 兼容旧导出：ML 抠图不依赖背景色/容差，这里仅作占位保留。 */
 export const DEFAULT_COLOR_KEY: ColorKeyOptions = {
-  bgColor: { r: 0, g: 255, b: 0 },
-  tolerance: 120,
-  feather: 40,
+  bgColor: { r: 0, g: 0, b: 0 },
+  tolerance: 60,
+  feather: 1,
 };
