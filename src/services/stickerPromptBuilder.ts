@@ -1,35 +1,23 @@
 /**
  * 表情包九宫格 prompt 构造器。
  *
- * 把用户写的提示词（含风格/文案）包装成「保持人物一致 + 3×3 九宫格 + 纯色背景」的
- * 完整出图指令。纯色背景是为了后续色键抠图（见 stickerMatting）。
+ * 把用户写的提示词（含风格/文案）包装成「保持人物一致 + 3×3 九宫格 + 便于抠图的简洁背景」
+ * 的完整出图指令。去背景由浏览器端 ML 分割完成（见 stickerMatting），不依赖特定背景色，
+ * 故只要求「简洁、与主体对比分明的纯色背景」即可，不再加白描边/纯黑底。
  */
 
-import type { ColorKeyOptions, MattingMode, StickerEmotion } from '@/types/sticker';
-
-/** rgb 转便于 prompt 描述的英文颜色短语。 */
-function describeBg(color: { r: number; g: number; b: number }): string {
-  const { r, g, b } = color;
-  if (g > 200 && r < 80 && b < 80) return 'pure chroma-key green (#00FF00)';
-  if (r > 200 && g < 80 && b < 80) return 'pure red';
-  if (b > 200 && r < 80 && g < 80) return 'pure blue';
-  if (r > 230 && g > 230 && b > 230) return 'pure white';
-  if (r < 40 && g < 40 && b < 40) return 'pure solid black (#000000)';
-  return `solid background color rgb(${r}, ${g}, ${b})`;
-}
+import type { MattingMode, StickerEmotion } from '@/types/sticker';
 
 /**
  * 构造九宫格表情包 prompt。
  * @param userPrompt 用户写的提示词正文（风格/文案/表情描述）
  * @param emotions 九宫格各格的情绪（按行优先顺序）
- * @param matting 抠图模式（colorKey 时追加纯色背景要求）
- * @param colorKey 色键参数（决定背景色描述）
+ * @param matting 抠图模式（colorKey 时追加便于抠图的背景要求）
  */
 export function buildStickerPrompt(
   userPrompt: string,
   emotions: StickerEmotion[],
   matting: MattingMode,
-  colorKey: ColorKeyOptions,
 ): string {
   const lines = [
     'Create a single square (1:1) image containing a 3x3 grid (9 cells) of expression stickers of the SAME character.',
@@ -51,10 +39,7 @@ export function buildStickerPrompt(
 
   if (matting === 'colorKey') {
     lines.push(
-      `Render each character as a die-cut sticker: add a thick, solid, uniform white outline (border / stroke) tightly wrapping the whole character silhouette, like a printed sticker edge.`,
-    );
-    lines.push(
-      `Place everything on a flat ${describeBg(colorKey.bgColor)} background filling every cell uniformly, no gradients, no shadows, no glow, so the background can be cleanly removed. The white sticker outline must clearly separate the character from the background even where the character's own colors are dark.`,
+      'Use a clean, flat, uniform light solid-color background with clear contrast against the character, no gradients, no shadows, no extra decorations, so the subject can be cleanly cut out.',
     );
   }
 

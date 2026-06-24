@@ -119,7 +119,7 @@ export const useStickerStore = create<StickerState>((set, get) => ({
 
     try {
       // 1. 单次图生图，出一张九宫格大图
-      const fullPrompt = buildStickerPrompt(prompt, emotions, matting, colorKey);
+      const fullPrompt = buildStickerPrompt(prompt, emotions, matting);
       const image = await generateImageByReference(
         fullPrompt,
         referenceImages,

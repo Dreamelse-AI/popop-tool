@@ -11,14 +11,14 @@ import { ResultPanel } from '@/components/ResultPanel';
 import { IconDownload } from '@/components/icons';
 
 const MATTING_OPTIONS: { id: MattingMode; label: string }[] = [
-  { id: 'colorKey', label: '白描边贴纸抠图' },
+  { id: 'colorKey', label: 'AI 抠图（去背景）' },
   { id: 'none', label: '不抠图（保留背景）' },
 ];
 
 const STATUS_TEXT: Record<string, string> = {
   generating: '出图中（单次生成九宫格）…',
   slicing: '切图中…',
-  matting: '抠图中…',
+  matting: 'AI 抠图中（首次需下载模型，稍慢）…',
 };
 
 export function StickerPage() {
@@ -40,6 +40,18 @@ export function StickerPage() {
   } = useStickerStore();
 
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightboxTransparent, setLightboxTransparent] = useState(false);
+
+  /** 打开单个表情大图：抠过图的是透明 PNG，关掉描边框 */
+  const openItemLightbox = (dataUrl: string) => {
+    setLightboxTransparent(matting === 'colorKey');
+    setLightboxUrl(dataUrl);
+  };
+  /** 打开九宫格大图：始终带背景，用常规描边框 */
+  const openGridLightbox = (url: string) => {
+    setLightboxTransparent(false);
+    setLightboxUrl(url);
+  };
 
   const busy = status === 'generating' || status === 'slicing' || status === 'matting';
   const doneItems = items.filter((i) => i.status === 'done' && i.dataUrl);
@@ -87,7 +99,7 @@ export function StickerPage() {
               </div>
               {matting === 'colorKey' && (
                 <p className="mt-1.5 text-xs text-ink-3">
-                  会要求模型把角色画成带白色粗描边的贴纸、纯黑背景，再从四边去掉黑底。白描边能保住黑发等与背景同色的部分，比纯色键更干净。
+                  用浏览器本地 AI 模型分割主体去背景，发丝级、无锯齿、不依赖背景色。首次使用会下载一次模型（稍慢），之后会缓存复用。
                 </p>
               )}
             </div>
@@ -129,7 +141,7 @@ export function StickerPage() {
                     批量下载（{doneItems.length}）
                   </button>
                   {gridUrl && (
-                    <button type="button" onClick={() => setLightboxUrl(gridUrl)} className="pop-link">
+                    <button type="button" onClick={() => openGridLightbox(gridUrl)} className="pop-link">
                       看九宫格大图
                     </button>
                   )}
@@ -155,7 +167,7 @@ export function StickerPage() {
                           src={item.dataUrl}
                           alt={`表情 ${item.index + 1}`}
                           className="h-full w-full cursor-zoom-in object-contain"
-                          onClick={() => setLightboxUrl(item.dataUrl!)}
+                          onClick={() => openItemLightbox(item.dataUrl!)}
                         />
                       ) : item.status === 'error' ? (
                         <span className="px-2 text-center text-xs text-err">{item.error}</span>
@@ -186,7 +198,7 @@ export function StickerPage() {
           )}
         </ResultPanel>
       </main>
-      <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+      <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} transparent={lightboxTransparent} />
     </div>
   );
 }
