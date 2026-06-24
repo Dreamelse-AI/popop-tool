@@ -32,7 +32,7 @@ export const DEFAULT_FIELDS: Record<PromptFieldKey, string> = {
   crop:
     'In every cell, place the character centered with generous margin / padding around it, so each cell can be safely center-cropped to a 1:1 square without cutting off the character.',
   background:
-    'Use a clean, flat, uniform medium-gray solid background with clear contrast against the character, no gradients, no shadows, no extra decorations, so the subject can be cleanly cut out.',
+    'Use a clean, flat, uniform solid background in a saturated color that strongly contrasts with the character (for example deep teal or vivid blue), avoiding white, gray and skin tones, no gradients, no shadows, no extra decorations, so the subject — including any white or light-colored clothing — can be cleanly and accurately cut out.',
 };
 
 /** 字段中文标签。 */

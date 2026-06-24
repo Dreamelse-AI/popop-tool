@@ -17,10 +17,12 @@ async function blobToBitmap(blob: Blob): Promise<ImageBitmap> {
 }
 
 /**
- * 边缘去白边（defringe）：消除抠图后半透明边缘残留的浅色描边。
- *   1. alpha 低于 LOW 的像素直接清零（删掉若隐若现的浅色羽化）
- *   2. 中间 alpha 像素做「除以 alpha」式的反预乘，抵消边缘被背景色污染的颜色偏移
- *   3. 轻微收缩（erode）一圈半透明边界，去掉最外层 1px 杂边
+ * 边缘去白边（defringe）：温和清理抠图后半透明边缘的杂边。
+ *
+ * 为什么不做「反预乘还色」：当主体本身是白/浅色（如白裙子），反预乘会把浅色边缘误当成
+ * 被背景污染而过度处理，反而吃掉白色服装边缘。这里只做最轻量的清理：
+ *   - alpha 极低（< LOW）的像素清零，去掉若隐若现的羽化杂边
+ *   - 其余像素保持 ML 输出的原始 alpha 与颜色，避免误伤浅色主体
  */
 function defringe(blob: Blob): Promise<string> {
   return blobToBitmap(blob).then((bitmap) => {
@@ -35,23 +37,10 @@ function defringe(blob: Blob): Promise<string> {
 
       const img = ctx.getImageData(0, 0, width, height);
       const d = img.data;
-      const LOW = 32; // 低于此 alpha 视为杂边，清零
-      const HIGH = 224; // 高于此视为实心，不处理
+      const LOW = 16; // 低于此 alpha 视为杂边，清零（调低，减少对主体边缘的侵蚀）
 
       for (let i = 0; i < d.length; i += 4) {
-        const a = d[i + 3];
-        if (a === 0) continue;
-        if (a < LOW) {
-          d[i + 3] = 0;
-          continue;
-        }
-        if (a < HIGH) {
-          // 反预乘去色边：把被浅背景染白的边缘像素颜色还原回实色
-          const inv = 255 / a;
-          d[i] = Math.min(255, d[i] * inv);
-          d[i + 1] = Math.min(255, d[i + 1] * inv);
-          d[i + 2] = Math.min(255, d[i + 2] * inv);
-        }
+        if (d[i + 3] !== 0 && d[i + 3] < LOW) d[i + 3] = 0;
       }
 
       ctx.putImageData(img, 0, 0);
