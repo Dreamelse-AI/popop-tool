@@ -36,6 +36,7 @@ export function VisualAssetPage() {
     setResolution,
     generate,
     retryItem,
+    archiveItem,
     cancel,
   } = useVisualAssetStore();
 
@@ -241,6 +242,25 @@ export function VisualAssetPage() {
                       </button>
                       {item.status === 'done' && item.url && (
                         <div className="flex shrink-0 items-center gap-1.5">
+                          {item.archiveStatus === 'archiving' && (
+                            <span className="text-[10px] text-ink-3" title="正在永久化存档">存档中…</span>
+                          )}
+                          {item.archiveStatus === 'archived' && (
+                            <span className="text-[10px] text-ok" title="已永久存储到图库">已存档</span>
+                          )}
+                          {item.archiveStatus === 'skipped' && (
+                            <span className="text-[10px] text-ink-3" title="服务端未配置 OSS，未永久化">未存档</span>
+                          )}
+                          {item.archiveStatus === 'archive-error' && (
+                            <button
+                              type="button"
+                              onClick={() => void archiveItem(item.id)}
+                              className="text-[10px] text-err hover:underline"
+                              title={item.archiveError || '存档失败，点击重试'}
+                            >
+                              存档失败·重试
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleDownload(item.url!, item.id)}

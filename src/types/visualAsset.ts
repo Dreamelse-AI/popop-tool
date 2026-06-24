@@ -104,4 +104,8 @@ export interface AssetResultItem {
   error?: string;
   /** 已存入图库后的资产 id（存过则有值，用于避免重复存 + UI 标记） */
   savedAssetId?: string;
+  /** 自动存档状态：archiving 上传中 / archived 已永久化 / archive-error 失败 / skipped 服务端未配 OSS */
+  archiveStatus?: 'archiving' | 'archived' | 'archive-error' | 'skipped';
+  /** 存档失败原因 */
+  archiveError?: string;
 }

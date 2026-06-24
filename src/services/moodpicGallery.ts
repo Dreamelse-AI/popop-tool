@@ -12,7 +12,6 @@
 import type {
   MoodPicAsset,
   MoodPicListResult,
-  SaveMoodPicInput,
 } from '@/types/moodpic';
 import type { AssetConfig } from '@/types/visualAsset';
 import { arcaPost } from './arcaClient';
@@ -68,24 +67,6 @@ export async function batchDeleteMoodPics(assetIds: string[]): Promise<void> {
   if (READ_VIA_ARCA) return batchDeleteViaArca(assetIds);
   const idSet = new Set(assetIds);
   writeLocal(readLocal().filter((a) => !idSet.has(a.assetId)));
-}
-
-/**
- * 保存一条资产。写链路（压缩 + 直传 OSS + /moodpic/save）暂未封装，
- * 当前仍写本地 localStorage；线上链路就绪后改走 saveViaArca。
- */
-export async function saveMoodPic(input: SaveMoodPicInput): Promise<MoodPicAsset> {
-  const asset: MoodPicAsset = {
-    assetId: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    url: input.url,
-    prompt: input.prompt,
-    config: input.config,
-    ratio: input.ratio,
-    resolution: input.resolution,
-    createdAt: new Date().toISOString(),
-  };
-  writeLocal([asset, ...readLocal()]);
-  return asset;
 }
 
 // [ARCA_IMPL] 对齐 arca.api（dev 分支 MoodPic 模块）字段，snake_case。
@@ -151,4 +132,56 @@ async function batchDeleteViaArca(assetIds: string[]): Promise<void> {
     '/moodpic/batch_delete',
     { asset_ids: assetIds },
   );
+}
+
+// [UPLOAD_CHAIN] 出图后自动写链路：调本服务端 /api/moodpic/upload
+// （服务端拉 apimart 图字节 → 传 OSS → 登记 arca /moodpic/save）。
+
+/** 写链路入参（前端拿到 apimart 直链后调用）。 */
+export interface UploadMoodPicInput {
+  imageUrl: string;
+  prompt: string;
+  config: AssetConfig;
+  ratio: string;
+  resolution: string;
+}
+
+/** 写链路结果。skipped=true 表示服务端未配 OSS，前端回退本地暂存。 */
+export interface UploadMoodPicResult {
+  skipped?: boolean;
+  assetId?: string;
+  url?: string;
+}
+
+/**
+ * 把一张已出图的资产存档（永久化）。
+ * 由服务端完成「拉图 → 传 OSS → 登记 arca」，前端不接触任何密钥、也不受 CORS 限制。
+ */
+export async function uploadMoodPic(
+  input: UploadMoodPicInput,
+  signal?: AbortSignal,
+): Promise<UploadMoodPicResult> {
+  const res = await fetch('/api/moodpic/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      imageUrl: input.imageUrl,
+      prompt: input.prompt,
+      configJson: JSON.stringify(input.config),
+      ratio: input.ratio,
+      resolution: input.resolution,
+    }),
+    signal,
+  });
+  if (!res.ok) {
+    let message = `存档失败（${res.status}）`;
+    try {
+      const j = (await res.json()) as { error?: string };
+      if (j.error) message = j.error;
+    } catch {
+      // 忽略解析失败，用默认文案
+    }
+    throw new Error(message);
+  }
+  return (await res.json()) as UploadMoodPicResult;
 }
