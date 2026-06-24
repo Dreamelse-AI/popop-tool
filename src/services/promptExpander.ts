@@ -91,7 +91,13 @@ async function expandViaApimart(
   const fragments = collectFragments(config, styles);
   const userContent = [
     'Expand the following visual elements into ONE concise, vivid English image-generation prompt.',
-    'Rules: output ONLY the prompt text, no quotes, no explanations, no line breaks; keep it under 80 words; preserve all given elements faithfully.',
+    'Rules:',
+    '- Output ONLY the prompt text, no quotes, no explanations, no line breaks.',
+    '- Keep it under 80 words; preserve all given elements faithfully.',
+    '- Describe ONLY subject, scene content, mood, lighting, color and texture.',
+    '- Do NOT mention any composition, framing, shot type, camera angle, crop, orientation or aspect ratio',
+    '  (e.g. avoid words like close-up, wide shot, panorama, portrait, landscape, vertical, horizontal,',
+    '  aerial view, top-down, full body, headshot, zoomed). The output dimensions are controlled separately.',
     '',
     `Elements: ${fragments.join(', ')}`,
   ].join('\n');
@@ -105,7 +111,7 @@ async function expandViaApimart(
         {
           role: 'system',
           content:
-            'You are a prompt engineer for image generation. You turn structured visual elements into a single polished English prompt.',
+            'You are a prompt engineer for image generation. You turn structured visual elements into a single polished English prompt. You never describe composition, framing, shot type, camera angle or aspect ratio — only the scene content and atmosphere.',
         },
         { role: 'user', content: userContent },
       ],
