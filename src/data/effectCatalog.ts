@@ -38,6 +38,9 @@ const COMMON_RANGES: Record<EffectMode, Record<CommonKey, ParamRange | null>> = 
   rain: { minSize: [28, 34], maxSize: [54, 66], blur: [3, 7], spread: [40, 65], padding: [40, 64] },
   barrage: { minSize: [28, 34], maxSize: [54, 66], blur: [3, 7], spread: [40, 65], padding: [40, 64] },
   tearBlur: { minSize: [44, 60], maxSize: null, blur: [4, 8], spread: [35, 60], padding: null },
+  magazineCover: { minSize: null, maxSize: null, blur: null, spread: null, padding: [72, 96] },
+  pullQuote: { minSize: null, maxSize: null, blur: null, spread: null, padding: [72, 100] },
+  verticalList: { minSize: null, maxSize: null, blur: null, spread: null, padding: [64, 88] },
 };
 
 /**
@@ -49,6 +52,17 @@ const EXTRA_PARAMS: Partial<Record<EffectMode, ParamSpec[]>> = {
     { key: 'tearBlurRadius', label: '模糊圆大小', unit: 'px', range: [80, 200] },
     { key: 'tearLetterSpacing', label: '字间距', unit: 'px', range: [0, 6] },
     { key: 'tearLineSpacing', label: '行间距', unit: '%', range: [130, 180] },
+  ],
+  magazineCover: [
+    // 「越大越细」：标题字号区间偏大，字重由 weightForSize 自动压低
+    { key: 'titleSize', label: '标题字号', unit: 'px', range: [84, 120] },
+  ],
+  pullQuote: [
+    { key: 'titleSize', label: '引文字号', unit: 'px', range: [64, 104] },
+  ],
+  verticalList: [
+    { key: 'titleSize', label: '标题字号', unit: 'px', range: [56, 88] },
+    { key: 'listLineSpacing', label: '行距', unit: '%', range: [130, 170] },
   ],
 };
 
@@ -72,9 +86,31 @@ const EFFECT_META: Record<
     whenToUse: '情绪化、内省的短文案；居中排版叠加局部模糊，含蓄克制。',
     swatch: '#9aa0c0',
   },
+  magazineCover: {
+    name: '杂志封面式',
+    whenToUse: '主题/标题型短文案；顶部元信息 + 中部大标题 + 底部条带，杂志封面气质。首段为标题，其余拼成底部条。',
+    swatch: '#b08968',
+  },
+  pullQuote: {
+    name: '拉引文式',
+    whenToUse: '金句、观点、结论型短句；超大居中引文 + 来源行，克制有章法。首段为引文，第二段为来源。',
+    swatch: '#8a8f9c',
+  },
+  verticalList: {
+    name: '竖向分条式',
+    whenToUse: '步骤/清单/要点型文案；顶部标题 + 逐条序号短句。首段为标题，其余每段一条。',
+    swatch: '#6b9b7c',
+  },
 };
 
-const EFFECT_ORDER: EffectMode[] = ['rain', 'barrage', 'tearBlur'];
+const EFFECT_ORDER: EffectMode[] = [
+  'rain',
+  'barrage',
+  'tearBlur',
+  'magazineCover',
+  'pullQuote',
+  'verticalList',
+];
 
 /** 合并公共参数（按列序，跳过 null）+ 异化参数，生成该效果的 ParamSpec 清单。 */
 function buildParams(mode: EffectMode): ParamSpec[] {

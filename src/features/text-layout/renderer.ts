@@ -4,6 +4,9 @@ import { fillCanvasBackground } from './colorUtils';
 import { drawRain } from './effects/rain';
 import { drawBarrage } from './effects/barrage';
 import { drawTearBlur } from './effects/tearBlur';
+import { drawMagazineCover } from './effects/magazineCover';
+import { drawPullQuote } from './effects/pullQuote';
+import { drawVerticalList } from './effects/verticalList';
 
 export interface RenderOptions {
   mode: EffectMode;
@@ -70,7 +73,9 @@ export function renderLayout(canvas: HTMLCanvasElement, options: RenderOptions):
     width,
     height,
     fontFamily: style.fontFamily,
+    fontKind: style.fontKind,
     fontColor: style.fontColor,
+    accent: style.accent,
     fontWeight,
     scale,
   };
@@ -84,6 +89,15 @@ export function renderLayout(canvas: HTMLCanvasElement, options: RenderOptions):
       break;
     case 'tearBlur':
       drawTearBlur(rc, text, params);
+      break;
+    case 'magazineCover':
+      drawMagazineCover(rc, text, params);
+      break;
+    case 'pullQuote':
+      drawPullQuote(rc, text, params);
+      break;
+    case 'verticalList':
+      drawVerticalList(rc, text, params);
       break;
   }
 }

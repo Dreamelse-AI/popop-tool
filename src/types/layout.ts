@@ -22,7 +22,10 @@ export const MAX_INPUT_LENGTH = 500;
 export type EffectMode =
   | 'rain' // 竖排雨落层次
   | 'barrage' // 横排弹幕模式
-  | 'tearBlur'; // 泪水模糊
+  | 'tearBlur' // 泪水模糊
+  | 'magazineCover' // 杂志封面式
+  | 'pullQuote' // 拉引文式
+  | 'verticalList'; // 竖向分条式
 
 /**
  * 特效渲染的「数值参数」。所有可在区间内随机的旋钮收在这里，渲染算法只读这份参数。
@@ -52,6 +55,11 @@ export interface EffectParams {
   tearLineSpacing: number;
   /** tearBlur：模糊圆半径(px) */
   tearBlurRadius: number;
+
+  /** magazineCover/pullQuote/verticalList：标题字号(px) */
+  titleSize: number;
+  /** verticalList：行间距（相对行高百分比） */
+  listLineSpacing: number;
 }
 
 /**
@@ -61,10 +69,14 @@ export interface EffectParams {
 export interface RenderStyle {
   /** 字体族（CSS font-family） */
   fontFamily: string;
+  /** 字体气质：serif / sans（决定「越大越细」字重曲线档位） */
+  fontKind: import('@/features/text-layout/typography').FontKind;
   /** 文字颜色 */
   fontColor: string;
   /** 背景色（纯色或 CSS 渐变）；有 bgImageUrl 时作为图片底色 */
   bgColor: string;
+  /** 强调色（kicker/发丝线/页码等点缀） */
+  accent: string;
   /** 背景图地址（可选，来自图片库） */
   bgImageUrl?: string;
   /** 背景图上的遮罩色（保证文字可读，可选） */

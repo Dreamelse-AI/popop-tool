@@ -19,7 +19,8 @@ export function drawRain(rc: RenderContext, text: string, params: EffectParams):
   const scatter = params.spread / 100;
 
   const availableHeight = Math.max(80, height - pad * 2);
-  const colGap = maxSize * 1.5;
+  const availableWidth = Math.max(80, width - pad * 2);
+  let colGap = maxSize * 1.5;
 
   // 先按顺序切列：每列先定一个统一字号，按该字号算容量，装满再换列
   type Column = { chars: string[]; size: number; charGap: number };
@@ -34,12 +35,26 @@ export function drawRain(rc: RenderContext, text: string, params: EffectParams):
     i += take;
   }
 
+  // 横向自适应：列太多导致整体超宽时，按比例统一缩小字号/列距，硬保证不溢出
+  let blockW = (columns.length - 1) * colGap + maxSize;
+  let scaledMax = maxSize;
+  if (blockW > availableWidth) {
+    const k = availableWidth / blockW;
+    colGap *= k;
+    scaledMax *= k;
+    columns.forEach((col) => {
+      col.size *= k;
+      col.charGap *= k;
+    });
+    blockW = availableWidth;
+  }
+
   // 列整体横向居中
   const totalWidth = (columns.length - 1) * colGap;
   const startX = clamp(
     width / 2 - totalWidth / 2,
-    pad + maxSize * 0.6,
-    width - pad - maxSize * 0.6,
+    pad + scaledMax * 0.6,
+    width - pad - scaledMax * 0.6,
   );
 
   columns.forEach((col, c) => {

@@ -102,8 +102,19 @@ function extractRecipeMock(input: ExtractLayoutInput): LayoutRecipe {
 
 /** 极简启发式：短句偏泪水，多行偏弹幕，长段偏雨落。 */
 function recommendMode(text: string, seed: number): EffectMode {
-  const lineCount = text.split(/\n+/).filter((l) => l.trim()).length;
+  const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const lineCount = lines.length;
   const length = text.length;
+
+  // 多段且每段较短 → 清单型 → 竖向分条
+  const listish = lineCount >= 3 && lines.slice(1).every((l) => l.length <= 24);
+  if (listish) return 'verticalList';
+
+  // 金句/结论型短句（含引号或很短的单段）→ 拉引文
+  if (lineCount <= 2 && (/["“”『』]/.test(text) || length <= 16)) return 'pullQuote';
+
+  // 标题型：单段、6-24 字、无明显句读 → 杂志封面
+  if (lineCount <= 2 && length <= 24 && !/[。！？，；]/.test(text)) return 'magazineCover';
 
   if (length <= 20 && lineCount <= 2) return 'tearBlur';
   if (lineCount >= 3) return 'barrage';
