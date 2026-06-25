@@ -3,6 +3,7 @@ import type { StylePrompt } from '@/types/stylePrompt';
 import { useStyleLibraryStore } from '@/features/style-prompt/libraryStore';
 import { useStyleTestStore } from '@/features/style-prompt/testStore';
 import { StyleEditor } from '@/features/style-prompt/StyleEditor';
+import { CoverUploader } from '@/features/style-prompt/CoverUploader';
 import { ToolHeader } from '@/components/ToolHeader';
 import { Lightbox } from '@/components/Lightbox';
 import { ResultPanel } from '@/components/ResultPanel';
@@ -18,22 +19,15 @@ export function StylePromptPage() {
 
   const [editorTarget, setEditorTarget] = useState<StylePrompt | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
-  const [presetPrompt, setPresetPrompt] = useState<string | undefined>(undefined);
-  const [presetName, setPresetName] = useState<string | undefined>(undefined);
   const [confirmDelete, setConfirmDelete] = useState<StylePrompt | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  /** 测试区「新增到画风库」的提示（成功/失败）。 */
+  const [addHint, setAddHint] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
     void lib.load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const openCreate = () => {
-    setEditorTarget(null);
-    setPresetName(undefined);
-    setPresetPrompt(undefined);
-    setEditorOpen(true);
-  };
 
   const openEdit = (item: StylePrompt) => {
     setEditorTarget(item);
@@ -41,14 +35,32 @@ export function StylePromptPage() {
   };
 
   const useForTest = (item: StylePrompt) => {
-    test.loadFromStyle(item.styleName, item.stylePrompt);
+    test.loadFromStyle({
+      styleName: item.styleName,
+      styleIcon: item.styleIcon,
+      stylePrompt: item.stylePrompt,
+      priority: item.priority,
+    });
   };
 
-  const saveAsStyle = (prompt: string) => {
-    setEditorTarget(null);
-    setPresetName(test.styleNameHint || '');
-    setPresetPrompt(prompt);
-    setEditorOpen(true);
+  /** 测试区直接把当前画风字段新增到画风库（无需弹窗重填）。 */
+  const addCurrentToLibrary = async () => {
+    setAddHint(null);
+    if (!test.styleName.trim()) {
+      setAddHint({ kind: 'err', text: '请先填画风名称' });
+      return;
+    }
+    const ok = await lib.create({
+      styleName: test.styleName.trim(),
+      styleIcon: test.styleIcon,
+      stylePrompt: test.stylePromptText,
+      priority: test.priority,
+    });
+    setAddHint(
+      ok
+        ? { kind: 'ok', text: `已新增「${test.styleName.trim()}」到画风库` }
+        : { kind: 'err', text: lib.errorMessage ?? '新增失败' },
+    );
   };
 
   const generating = test.status === 'generating';
@@ -58,12 +70,7 @@ export function StylePromptPage() {
     <div className="min-h-full">
       <ToolHeader
         title="画风生图工具"
-        subtitle="管理画风库（增改删），用画风 + 人物等提示词测试出图，满意的存为新画风"
-        actions={
-          <button type="button" onClick={openCreate} className="pop-btn-primary px-3 py-1.5 text-xs">
-            + 新增画风
-          </button>
-        }
+        subtitle="管理画风库（增改删），用画风 + 人物等提示词测试出图，满意的直接新增到画风库"
       />
       <main className="mx-auto grid max-w-6xl grid-cols-1 gap-8 p-6 sm:p-8 lg:grid-cols-2">
         {/* 左：画风库 */}
@@ -149,29 +156,64 @@ export function StylePromptPage() {
           </div>
         </section>
 
-        {/* 右：生图测试 [TEST_AREA] */}
+        {/* 右：生图测试 + 画风草稿 [TEST_AREA] */}
         <section className="flex flex-col gap-5">
           <div className="pop-card flex flex-col gap-4">
-            <h2 className="font-display text-sm font-extrabold text-ink">生图测试</h2>
-            <div>
-              <div className="pop-label mb-1.5">
-                画风 Prompt
-                {test.styleNameHint && (
-                  <span className="ml-2 font-mono text-[11px] font-normal text-ink-3">
-                    （来自：{test.styleNameHint}）
-                  </span>
-                )}
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-sm font-extrabold text-ink">生图测试</h2>
+              <button
+                type="button"
+                onClick={() => void addCurrentToLibrary()}
+                disabled={lib.submitting}
+                className="pop-btn-primary px-3 py-1.5 text-xs"
+                title="把当前画风字段直接新增到画风库"
+              >
+                {lib.submitting ? '新增中…' : '+ 新增到画风库'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[auto_1fr] sm:items-start">
+              <CoverUploader value={test.styleIcon} onChange={test.setStyleIcon} />
+              <div className="flex flex-col gap-3">
+                <div>
+                  <div className="pop-label mb-1.5">画风名称 *</div>
+                  <input
+                    value={test.styleName}
+                    onChange={(e) => test.setStyleName(e.target.value)}
+                    className="pop-input w-full py-1.5"
+                    placeholder="如：吉卜力水彩"
+                  />
+                </div>
+                <div>
+                  <div className="pop-label mb-1.5">优先级</div>
+                  <input
+                    type="number"
+                    value={test.priority}
+                    onChange={(e) => test.setPriority(Number(e.target.value))}
+                    className="pop-input w-28 py-1.5"
+                  />
+                  <span className="ml-2 text-xs text-ink-3">越大越靠前</span>
+                </div>
               </div>
+            </div>
+
+            <div>
+              <div className="pop-label mb-1.5">画风 Prompt</div>
               <textarea
                 value={test.stylePromptText}
                 onChange={(e) => test.setStylePromptText(e.target.value)}
                 rows={3}
                 className="pop-input w-full resize-y py-2 font-mono text-xs leading-relaxed"
-                placeholder="从左侧画风「用于测试」带入，或直接编辑"
+                placeholder="描述该画风的英文 prompt 片段；从左侧画风「用于测试」可带入"
               />
             </div>
             <div>
-              <div className="pop-label mb-1.5">人物 / 其他提示词</div>
+              <div className="pop-label mb-1.5">
+                人物 / 其他提示词
+                <span className="ml-2 font-mono text-[11px] font-normal text-ink-3">
+                  仅用于测试出图，不会存入画风
+                </span>
+              </div>
               <textarea
                 value={test.extraPrompt}
                 onChange={(e) => test.setExtraPrompt(e.target.value)}
@@ -239,6 +281,11 @@ export function StylePromptPage() {
               )}
             </div>
             {test.status === 'error' && <p className="pop-callout-err">{test.errorMessage}</p>}
+            {addHint && (
+              <p className={addHint.kind === 'ok' ? 'text-xs font-semibold text-ok' : 'pop-callout-err'}>
+                {addHint.text}
+              </p>
+            )}
           </div>
 
           <ResultPanel>
@@ -293,15 +340,7 @@ export function StylePromptPage() {
                         )}
                       </div>
                       {item.status === 'done' && item.url && (
-                        <div className="flex items-center justify-between gap-1 border-t-2 border-ink px-2 py-1.5">
-                          <button
-                            type="button"
-                            onClick={() => saveAsStyle(item.prompt)}
-                            className="truncate text-left text-xs font-semibold text-ink-2 hover:text-ink"
-                            title="把这次的 prompt 存为新画风"
-                          >
-                            存为画风
-                          </button>
+                        <div className="flex items-center justify-end gap-1 border-t-2 border-ink px-2 py-1.5">
                           <button
                             type="button"
                             onClick={() => downloadImage(item.url!, `style-test-${item.id}.png`)}
@@ -323,12 +362,7 @@ export function StylePromptPage() {
       </main>
 
       {editorOpen && (
-        <StyleEditor
-          target={editorTarget}
-          presetName={presetName}
-          presetPrompt={presetPrompt}
-          onClose={() => setEditorOpen(false)}
-        />
+        <StyleEditor target={editorTarget} onClose={() => setEditorOpen(false)} />
       )}
 
       {confirmDelete && (

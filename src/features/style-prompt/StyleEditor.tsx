@@ -1,8 +1,8 @@
 /**
- * 画风编辑弹窗（新增 / 编辑共用）。
+ * 画风编辑弹窗（左侧画风库「编辑」用）。
  *
- * 字段：名称、封面图、画风 prompt、优先级。
- * 编辑时带入已有值；提交走 store.create / store.update。
+ * 字段：名称、封面图、画风 prompt、优先级。带入已有值，提交走 store.update。
+ * （新增画风的入口在右侧测试区，测完直接入库，不走本弹窗。）
  */
 
 import { useEffect, useState } from 'react';
@@ -11,22 +11,13 @@ import { useStyleLibraryStore } from './libraryStore';
 import { CoverUploader } from './CoverUploader';
 
 interface StyleEditorProps {
-  /** 编辑目标；为 null 表示新增。 */
+  /** 编辑目标；为 null 表示新增（兜底）。 */
   target: StylePrompt | null;
-  /** 新增时的预填（用于「生图通过 → 存为画风」带入 prompt/名称）。 */
-  presetName?: string;
-  presetPrompt?: string;
   onClose: () => void;
   onSaved?: () => void;
 }
 
-export function StyleEditor({
-  target,
-  presetName,
-  presetPrompt,
-  onClose,
-  onSaved,
-}: StyleEditorProps) {
+export function StyleEditor({ target, onClose, onSaved }: StyleEditorProps) {
   const isEdit = target !== null;
   const { create, update, submitting } = useStyleLibraryStore();
 
@@ -43,12 +34,12 @@ export function StyleEditor({
       setStylePrompt(target.stylePrompt);
       setPriority(target.priority);
     } else {
-      setStyleName(presetName ?? '');
+      setStyleName('');
       setStyleIcon('');
-      setStylePrompt(presetPrompt ?? '');
+      setStylePrompt('');
       setPriority(0);
     }
-  }, [target, presetName, presetPrompt]);
+  }, [target]);
 
   const handleSubmit = async () => {
     setFormError(null);

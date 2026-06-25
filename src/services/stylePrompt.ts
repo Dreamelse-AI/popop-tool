@@ -20,6 +20,83 @@ import type {
 } from '@/types/stylePrompt';
 import { arcaPost } from './arcaClient';
 
+/**
+ * 接入开关（过渡期）。
+ *   true  → 本地 localStorage 临时画风库（后端 internal 接口经公网网关 504、且后端将重搭新框架，先让前端跑通）
+ *   false → 走真实 arca 接口（后端新框架/对外接口就绪后置 false 即可，UI 不动）
+ */
+const USE_MOCK = true;
+
+// ==================== 本地 mock 实现（localStorage） ====================
+const LOCAL_KEY = 'popop-style-prompt-library';
+
+function readLocal(): StylePrompt[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_KEY);
+    return raw ? (JSON.parse(raw) as StylePrompt[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocal(items: StylePrompt[]): void {
+  try {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(items));
+  } catch {
+    // 忽略写入失败（如配额满），不阻断主流程
+  }
+}
+
+/** 按优先级降序、其次新创建在前。 */
+function sortLocal(items: StylePrompt[]): StylePrompt[] {
+  return [...items].sort((a, b) => b.priority - a.priority || b.id - a.id);
+}
+
+function listLocal(): StylePrompt[] {
+  return sortLocal(readLocal());
+}
+
+function createLocal(input: CreateStylePromptInput): number {
+  const now = new Date().toISOString();
+  const id = Date.now();
+  const item: StylePrompt = {
+    id,
+    styleName: input.styleName,
+    styleIcon: input.styleIcon ?? '',
+    stylePrompt: input.stylePrompt ?? '',
+    priority: input.priority,
+    status: 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+  writeLocal([item, ...readLocal()]);
+  return id;
+}
+
+function updateLocal(input: UpdateStylePromptInput): void {
+  const now = new Date().toISOString();
+  writeLocal(
+    readLocal().map((it) =>
+      it.id === input.id
+        ? {
+            ...it,
+            styleName: input.styleName ?? it.styleName,
+            styleIcon: input.styleIcon ?? it.styleIcon,
+            stylePrompt: input.stylePrompt ?? it.stylePrompt,
+            priority: input.priority ?? it.priority,
+            updatedAt: now,
+          }
+        : it,
+    ),
+  );
+}
+
+function deleteLocal(id: number): void {
+  writeLocal(readLocal().filter((it) => it.id !== id));
+}
+
+// ==================== arca 契约对接 ====================
+
 /** arca 契约：OpsStylePromptItem（snake_case 原样）。 */
 interface OpsStylePromptItem {
   id: number;
@@ -55,6 +132,7 @@ function toStylePrompt(it: OpsStylePromptItem): StylePrompt {
  * 对应：POST /internal/ops/style_prompt/list
  */
 export async function listStylePrompts(signal?: AbortSignal): Promise<StylePrompt[]> {
+  if (USE_MOCK) return listLocal();
   const data = await arcaPost<Record<string, never>, ListStylePromptResp>(
     '/internal/ops/style_prompt/list',
     {},
@@ -71,6 +149,7 @@ export async function createStylePrompt(
   input: CreateStylePromptInput,
   signal?: AbortSignal,
 ): Promise<number> {
+  if (USE_MOCK) return createLocal(input);
   const data = await arcaPost<
     {
       style_name: string;
@@ -100,6 +179,10 @@ export async function updateStylePrompt(
   input: UpdateStylePromptInput,
   signal?: AbortSignal,
 ): Promise<void> {
+  if (USE_MOCK) {
+    updateLocal(input);
+    return;
+  }
   const body: Record<string, unknown> = { id: input.id };
   if (input.styleName !== undefined) body.style_name = input.styleName;
   if (input.styleIcon !== undefined) body.style_icon = input.styleIcon;
@@ -117,6 +200,10 @@ export async function updateStylePrompt(
  * 对应：POST /internal/ops/style_prompt/delete（DeleteStylePromptReq）
  */
 export async function deleteStylePrompt(id: number, signal?: AbortSignal): Promise<void> {
+  if (USE_MOCK) {
+    deleteLocal(id);
+    return;
+  }
   await arcaPost<{ id: number }, Record<string, never>>(
     '/internal/ops/style_prompt/delete',
     { id },
