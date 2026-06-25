@@ -104,6 +104,18 @@ export interface AssetResultItem {
   phase?: 'expanding' | 'imaging';
   /** 成功后的图片直链 */
   url?: string;
+  /** UI 选择的输出比例。 */
+  ratio?: AspectRatio;
+  /** UI 选择的输出分辨率档位。 */
+  resolution?: Resolution;
+  /** 实际提交给 apimart 的 size 字段，例如 1:1 或 2048x2048。 */
+  requestSize?: string;
+  /** ratio + resolution 映射出的目标像素尺寸。 */
+  pixelSize?: string;
+  /** 浏览器实际读到的图片宽度。 */
+  actualWidth?: number;
+  /** 浏览器实际读到的图片高度。 */
+  actualHeight?: number;
   /** 失败原因 */
   error?: string;
   /** 已存入图库后的资产 id（存过则有值，用于避免重复存 + UI 标记） */

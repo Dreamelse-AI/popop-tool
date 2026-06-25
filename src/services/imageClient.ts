@@ -21,14 +21,30 @@ interface GenerateImageRequest {
   n: number;
   /** 比例（如 9:16）或精确像素（如 1152x2048） */
   size: string;
-  /** 分辨率档位 1k/2k/4k；传精确像素时省略 */
-  resolution?: string;
+  /** 分辨率档位 1k/2k/4k。 */
+  resolution: string;
+}
+
+/** 本次提交给 apimart 的输出规格。 */
+export interface ImageOutputSpec {
+  /** UI 选择的比例，例如 1:1 / 9:16。 */
+  ratio: string;
+  /** UI 选择的分辨率档位，例如 1k / 2k / 4k。 */
+  resolution: string;
+  /** 实际写入 apimart size 字段的值。 */
+  requestSize: string;
+  /** ratio + resolution 能精确映射时得到的像素尺寸。 */
+  pixelSize?: string;
 }
 
 /** 图像生成结果。apimart 任务完成后从 result.images[0].url[0] 取直链。 */
 export interface GeneratedImage {
   /** 直链 URL */
   url: string;
+  /** 实际提交给图像模型的 prompt。 */
+  prompt: string;
+  /** 本次请求实际使用的输出规格，便于 UI/图库复现。 */
+  outputSpec: ImageOutputSpec;
 }
 
 /** 同源代理基址：dev 走 vite proxy 的 /apimart，生产同源 /apimart。 */
@@ -97,11 +113,9 @@ export interface ImageGenOptions {
 }
 
 /**
- * 比例 × 分辨率 → 精确像素尺寸映射（来自 apimart gpt-image-2 文档表格）。
+ * 比例 × 分辨率 → 目标像素尺寸映射（来自 apimart gpt-image-2 文档表格）。
  *
- * 背景：gpt-image-2 对纯比例字符串（如 "9:16"）的遵循不稳定，出图比例会漂。
- * 文档支持直接传像素尺寸（"传 size 则强制按指定尺寸出图"），传像素更可靠。
- * 因此前端把 ratio+resolution 映射成像素再传，锁死比例。
+ * 请求体仍按官方主路径传 size=比例、resolution=档位；像素值用于 UI 核对和 prompt 约束。
  */
 const PIXEL_SIZE_MAP: Record<string, Record<string, string>> = {
   '1:1': { '1k': '1024x1024', '2k': '2048x2048', '4k': '2880x2880' },
@@ -113,28 +127,41 @@ const PIXEL_SIZE_MAP: Record<string, Record<string, string>> = {
   '9:16': { '1k': '864x1536', '2k': '1152x2048', '4k': '2160x3840' },
 };
 
-/** 把 ratio+resolution 解析为传给 apimart 的 size 值（优先精确像素，回退原比例）。 */
-function resolveSize(ratio: string, resolution: string): string {
-  return PIXEL_SIZE_MAP[ratio]?.[resolution] ?? ratio;
+/** 把 ratio+resolution 解析为传给 apimart 的输出规格。 */
+export function resolveOutputSpec(ratio: string, resolution: string): ImageOutputSpec {
+  return {
+    ratio,
+    resolution,
+    requestSize: ratio,
+    pixelSize: PIXEL_SIZE_MAP[ratio]?.[resolution],
+  };
+}
+
+/** 给最终生图 prompt 追加机器可读的输出约束，避免文本侧把比例交给模型自由发挥。 */
+export function appendOutputSpecToPrompt(prompt: string, outputSpec: ImageOutputSpec): string {
+  const cleanPrompt = prompt.trim();
+  if (/Output canvas:/i.test(cleanPrompt)) return cleanPrompt;
+
+  const constraint = outputSpec.pixelSize
+    ? `Output canvas: ${outputSpec.ratio} aspect ratio, ${outputSpec.resolution} resolution (${outputSpec.pixelSize} pixels). Do not change the aspect ratio.`
+    : `Output canvas: ${outputSpec.ratio} aspect ratio, ${outputSpec.resolution} resolution. Do not change the aspect ratio.`;
+  return `${cleanPrompt}\n\n${constraint}`;
 }
 
 /** 提交生成任务（直接给定 prompt），返回 task_id。 */
 async function createTaskByPrompt(
   prompt: string,
-  opts: ImageGenOptions,
+  outputSpec: ImageOutputSpec,
   signal?: AbortSignal,
   /** 可选参考图（base64 data URI 或公网 URL），传入则走图生图模式 */
   imageUrls?: string[],
 ): Promise<string> {
-  const size = resolveSize(opts.size, opts.resolution);
-  const isPixelSize = /^\d+x\d+$/.test(size);
   const body: GenerateImageRequest & { image_urls?: string[] } = {
     model: APIMART_MODEL,
     prompt,
     n: 1,
-    size: size as GenerateImageRequest['size'],
-    // 传精确像素时 resolution 已隐含在像素里，再传会与像素冲突，故仅在回退比例时传
-    ...(isPixelSize ? {} : { resolution: opts.resolution as GenerateImageRequest['resolution'] }),
+    size: outputSpec.requestSize,
+    resolution: outputSpec.resolution,
   };
   if (imageUrls && imageUrls.length > 0) {
     body.image_urls = imageUrls;
@@ -262,9 +289,11 @@ export async function generateImageByPrompt(
   opts: ImageGenOptions,
   signal?: AbortSignal,
 ): Promise<GeneratedImage> {
-  const taskId = await createTaskByPrompt(prompt, opts, signal);
+  const outputSpec = resolveOutputSpec(opts.size, opts.resolution);
+  const finalPrompt = appendOutputSpecToPrompt(prompt, outputSpec);
+  const taskId = await createTaskByPrompt(finalPrompt, outputSpec, signal);
   const url = await pollTask(taskId, signal);
-  return { url };
+  return { url, prompt: finalPrompt, outputSpec };
 }
 
 /**
@@ -280,7 +309,9 @@ export async function generateImageByReference(
   opts: ImageGenOptions,
   signal?: AbortSignal,
 ): Promise<GeneratedImage> {
-  const taskId = await createTaskByPrompt(prompt, opts, signal, imageUrls);
+  const outputSpec = resolveOutputSpec(opts.size, opts.resolution);
+  const finalPrompt = appendOutputSpecToPrompt(prompt, outputSpec);
+  const taskId = await createTaskByPrompt(finalPrompt, outputSpec, signal, imageUrls);
   const url = await pollTask(taskId, signal);
-  return { url };
+  return { url, prompt: finalPrompt, outputSpec };
 }

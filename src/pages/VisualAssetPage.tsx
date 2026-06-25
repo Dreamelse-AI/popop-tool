@@ -40,6 +40,7 @@ export function VisualAssetPage() {
     retryItem,
     retryAllFailed,
     archiveItem,
+    noteImageSize,
     cancel,
   } = useVisualAssetStore();
 
@@ -271,13 +272,20 @@ export function VisualAssetPage() {
                     key={item.id}
                     className="flex flex-col overflow-hidden rounded-pop border-2 border-ink bg-paper shadow-sticker-sm"
                   >
-                    <div className="flex aspect-[3/4] items-center justify-center bg-soft">
+                    <div
+                      className="flex items-center justify-center bg-soft"
+                      style={{ aspectRatio: (item.ratio ?? ratio).replace(':', ' / ') }}
+                    >
                       {item.status === 'done' && item.url ? (
                         <img
                           src={item.url}
                           alt={item.config.emotion}
                           className="h-full w-full cursor-zoom-in object-cover"
                           onClick={() => setLightboxUrl(item.url!)}
+                          onLoad={(event) => {
+                            const img = event.currentTarget;
+                            noteImageSize(item.id, img.naturalWidth, img.naturalHeight);
+                          }}
                         />
                       ) : item.status === 'error' ? (
                         <div className="flex flex-col items-center gap-2 px-2 text-center">
@@ -308,6 +316,16 @@ export function VisualAssetPage() {
                       >
                         {item.config.emotion} · {item.config.type}
                       </button>
+                      {item.requestSize && (
+                        <span
+                          className="shrink-0 rounded bg-soft px-1.5 py-0.5 text-[10px] font-semibold text-ink-3"
+                          title={`请求：size=${item.requestSize}, resolution=${item.resolution ?? '未知'}${item.pixelSize ? `, target=${item.pixelSize}` : ''}${item.actualWidth && item.actualHeight ? `；实际：${item.actualWidth}x${item.actualHeight}` : ''}`}
+                        >
+                          {item.actualWidth && item.actualHeight
+                            ? `${item.actualWidth}×${item.actualHeight}`
+                            : `${item.requestSize} · ${(item.resolution ?? '').toUpperCase()}`}
+                        </span>
+                      )}
                       {item.status === 'done' && item.url && (
                         <div className="flex shrink-0 items-center gap-1.5">
                           {item.archiveStatus === 'archiving' && (
