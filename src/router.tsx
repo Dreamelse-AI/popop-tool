@@ -7,6 +7,7 @@ import { MoodPicGalleryPage } from '@/pages/MoodPicGalleryPage';
 import { StickerPage } from '@/pages/StickerPage';
 import { StylePromptPage } from '@/pages/StylePromptPage';
 import { PalettePage } from '@/pages/PalettePage';
+import { BatchNameImagePage } from '@/pages/BatchNameImagePage';
 
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
@@ -17,4 +18,5 @@ export const router = createBrowserRouter([
   { path: '/tools/sticker', element: <StickerPage /> },
   { path: '/tools/style-prompt', element: <StylePromptPage /> },
   { path: '/tools/palette', element: <PalettePage /> },
+  { path: '/tools/batch-name-image', element: <BatchNameImagePage /> },
 ]);

@@ -66,6 +66,15 @@ const TOOLS: ToolEntry[] = [
     status: 'available',
     tag: '配色',
   },
+  {
+    id: 'batch-name-image',
+    name: '批量名字生图',
+    description:
+      '左侧输入多个基础元素（空行分隔）+ 题材类型 + 风格 + 比例，整理扩写后批量出图，右侧单张/批量保存删除。',
+    path: '/tools/batch-name-image',
+    status: 'available',
+    tag: 'AIGC',
+  },
 ];
 
 export function HomePage() {
