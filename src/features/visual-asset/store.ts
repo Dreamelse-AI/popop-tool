@@ -111,7 +111,7 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
   selection: { ...EMPTY_SELECTION },
   count: 4,
-  ratio: '9:16',
+  ratio: '1:1',
   resolution: '2k',
   concurrency: DEFAULT_CONCURRENCY,
   status: 'idle',
@@ -320,7 +320,7 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
     set({
       selection: { ...EMPTY_SELECTION },
       count: 4,
-      ratio: '9:16',
+      ratio: '1:1',
       resolution: '2k',
       concurrency: DEFAULT_CONCURRENCY,
       status: 'idle',
