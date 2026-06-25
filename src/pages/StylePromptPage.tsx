@@ -6,7 +6,7 @@ import { CoverUploader } from '@/features/style-prompt/CoverUploader';
 import { ToolHeader } from '@/components/ToolHeader';
 import { Lightbox } from '@/components/Lightbox';
 import { IconDownload } from '@/components/icons';
-import { downloadImage } from '@/features/background/downloadImage';
+import { downloadImage } from '@/utils/downloadImage';
 import { useState } from 'react';
 
 const RATIOS = ['9:16', '3:4', '2:3', '1:1', '3:2', '4:3', '16:9'];
@@ -104,7 +104,7 @@ export function StylePromptPage() {
   return (
     <div className="min-h-full">
       <ToolHeader
-        title="画风生图工具"
+        title="画风测试工具"
         subtitle="左侧选画风 / 新建，中间编辑参数并测试出图，右侧看结果"
       />
       <main className="mx-auto grid max-w-[1400px] grid-cols-1 gap-6 p-6 sm:p-8 lg:grid-cols-[200px_minmax(0,1fr)_minmax(0,1fr)]">

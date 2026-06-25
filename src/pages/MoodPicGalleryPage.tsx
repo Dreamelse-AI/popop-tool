@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useGalleryStore } from '@/features/visual-asset/galleryStore';
-import { downloadImage } from '@/features/background/downloadImage';
+import { downloadImage } from '@/utils/downloadImage';
 import { ToolHeader } from '@/components/ToolHeader';
 import { Lightbox } from '@/components/Lightbox';
 

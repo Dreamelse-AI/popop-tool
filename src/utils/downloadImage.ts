@@ -1,5 +1,5 @@
 /**
- * 背景图下载工具。
+ * 图片下载工具。
  *
  * apimart 可能返回直链 url（跨域）或 base64。直链直接用 <a download> 在部分浏览器
  * 会因跨域被当作导航打开而非下载，因此统一先 fetch 成 blob 再触发下载。
@@ -16,7 +16,7 @@ function triggerDownload(href: string, fileName: string): void {
 }
 
 /**
- * 下载生成的背景图。
+ * 下载图片。
  * @param src 图片地址（http(s) 直链或 data:base64）
  * @param fileName 下载文件名
  */

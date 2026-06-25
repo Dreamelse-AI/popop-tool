@@ -22,15 +22,6 @@ const TOOLS: ToolEntry[] = [
     tag: '排版',
   },
   {
-    id: 'background',
-    name: '氛围背景图生成器',
-    description:
-      '组合 Motion/Medium/Light/Color/Mood 五层，生成统一品牌语言的抽象氛围背景图。',
-    path: '/tools/background',
-    status: 'available',
-    tag: 'AIGC',
-  },
-  {
     id: 'visual-asset',
     name: '视觉资产生产引擎',
     description:
@@ -50,7 +41,7 @@ const TOOLS: ToolEntry[] = [
   },
   {
     id: 'style-prompt',
-    name: '画风生图工具',
+    name: '画风测试工具',
     description:
       '管理画风库（增改删 + 封面图），用画风 + 人物等提示词测试出图（单张/多张），满意的存为新画风。',
     path: '/tools/style-prompt',
@@ -68,9 +59,9 @@ const TOOLS: ToolEntry[] = [
   },
   {
     id: 'batch-name-image',
-    name: '批量名字生图',
+    name: '批量生成工具',
     description:
-      '左侧输入多个基础元素（空行分隔）+ 题材类型 + 风格 + 比例，整理扩写后批量出图，右侧单张/批量保存删除。',
+      '左侧逐行输入多个基础元素 + 题材类型 + 风格 + 比例，整理扩写后批量出图，右侧单张/批量保存删除。',
     path: '/tools/batch-name-image',
     status: 'available',
     tag: 'AIGC',
