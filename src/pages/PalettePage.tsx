@@ -6,27 +6,29 @@ import { ToolHeader } from '@/components/ToolHeader';
 import { Lightbox } from '@/components/Lightbox';
 import type { PaletteEntry } from '@/types/palette';
 
-/** 配色情绪库工具页：拖图识别配色 → 命名/情绪场景 → 永久存储 + 表格管理。 */
+/** 配色情绪库工具页：拖图/粘贴识别配色 → 命名/情绪词 → 永久存储 + 表格管理。 */
 export function PalettePage() {
   const {
     items,
     total,
     listStatus,
     listError,
-    draft,
-    analyzing,
+    drafts,
+    analyzingCount,
     analyzeError,
-    saving,
     deletingId,
     load,
-    analyzeFile,
+    analyzeFiles,
     updateDraft,
     discardDraft,
+    discardAllDrafts,
     saveDraft,
+    saveAllDrafts,
     remove,
   } = usePaletteStore();
 
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [savingAll, setSavingAll] = useState(false);
 
   useEffect(() => {
     void load();
@@ -37,28 +39,64 @@ export function PalettePage() {
     if (ok) void remove(entry.id);
   };
 
+  const handleSaveAll = async () => {
+    setSavingAll(true);
+    try {
+      await saveAllDrafts();
+    } finally {
+      setSavingAll(false);
+    }
+  };
+
   return (
     <div className="min-h-full">
       <ToolHeader
         title="配色情绪库"
-        subtitle={`拖入图片自动识别配色、命名与情绪场景，永久存储在服务器 · 已存 ${total} 条`}
+        subtitle={`拖入 / 粘贴图片自动识别配色与命名，永久存储在服务器 · 已存 ${total} 条`}
       />
 
       <main className="mx-auto max-w-6xl space-y-6 p-6 sm:p-8">
-        {draft ? (
-          <PaletteDraftEditor
-            draft={draft}
-            saving={saving}
-            errorMessage={analyzeError}
-            onChange={updateDraft}
-            onSave={saveDraft}
-            onDiscard={discardDraft}
-          />
-        ) : (
-          <>
-            <PaletteDropzone onFile={(f) => void analyzeFile(f)} busy={analyzing} />
-            {analyzeError && <div className="pop-callout-err">{analyzeError}</div>}
-          </>
+        <PaletteDropzone onFiles={(fs) => void analyzeFiles(fs)} analyzing={analyzingCount > 0} />
+        {analyzeError && <div className="pop-callout-err">{analyzeError}</div>}
+
+        {drafts.length > 0 && (
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="pop-label">
+                待确认草稿
+                <span className="ml-2 font-mono text-[11px] font-normal text-ink-3">
+                  {drafts.length} 条
+                </span>
+              </span>
+              {drafts.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={discardAllDrafts} className="pop-link" disabled={savingAll}>
+                    全部丢弃
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveAll()}
+                    disabled={savingAll}
+                    className="pop-btn-primary px-3 py-1.5 text-xs"
+                  >
+                    {savingAll ? '保存中…' : `全部保存（${drafts.length}）`}
+                  </button>
+                </div>
+              )}
+            </div>
+            {drafts.map((d, i) => (
+              <PaletteDraftEditor
+                key={d.key}
+                draft={d}
+                saving={d.saving || savingAll}
+                errorMessage={d.error}
+                index={i}
+                onChange={(patch) => updateDraft(d.key, patch)}
+                onSave={() => void saveDraft(d.key)}
+                onDiscard={() => discardDraft(d.key)}
+              />
+            ))}
+          </section>
         )}
 
         <section>
@@ -66,8 +104,8 @@ export function PalettePage() {
             <div className="flex h-40 items-center justify-center text-sm text-ink-3">加载中…</div>
           )}
           {listStatus === 'error' && <div className="pop-callout-err">{listError}</div>}
-          {listStatus === 'ready' && items.length === 0 && (
-            <div className="pop-empty h-40">配色库还是空的。拖一张图进来，识别后即可永久保存。</div>
+          {listStatus === 'ready' && items.length === 0 && drafts.length === 0 && (
+            <div className="pop-empty h-40">配色库还是空的。拖入或粘贴一张图，识别后即可永久保存。</div>
           )}
           {items.length > 0 && (
             <PaletteTable
@@ -92,11 +130,11 @@ interface PaletteTableProps {
   onDelete: (entry: PaletteEntry) => void;
 }
 
-/** 配色记录表格：原始图 / 配色 / id / name / mood / bgColor / fontColor / 场景 / 操作。 */
+/** 配色记录表格：原始图 / 配色 / id / name / mood / bgColor / fontColor / 操作。 */
 function PaletteTable({ items, deletingId, onPreview, onDelete }: PaletteTableProps) {
   return (
     <div className="overflow-x-auto rounded-pop-lg border-2 border-ink bg-paper shadow-sticker">
-      <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+      <table className="w-full min-w-[760px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b-2 border-ink bg-cream-soft font-mono text-[11px] uppercase text-ink-2">
             <Th>原始图</Th>
@@ -106,7 +144,6 @@ function PaletteTable({ items, deletingId, onPreview, onDelete }: PaletteTablePr
             <Th>mood</Th>
             <Th>bgColor</Th>
             <Th>fontColor</Th>
-            <Th>情绪氛围场景</Th>
             <Th>操作</Th>
           </tr>
         </thead>
@@ -149,11 +186,6 @@ function PaletteTable({ items, deletingId, onPreview, onDelete }: PaletteTablePr
               </Td>
               <Td>
                 <SwatchValue value={entry.fontColor} />
-              </Td>
-              <Td>
-                <span className="block max-w-[16rem] text-xs leading-relaxed text-ink-2">
-                  {entry.scene}
-                </span>
               </Td>
               <Td>
                 <button
