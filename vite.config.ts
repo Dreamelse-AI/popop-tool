@@ -6,6 +6,41 @@ import path from 'node:path';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
 /**
+ * dev 环境挂配色情绪库后端（生产由 Express 承担）。
+ * 复用 server/paletteRoutes 的框架无关 handler，dev 与生产行为一致。
+ */
+function palettePlugin(): PluginOption {
+  return {
+    name: 'palette-api-dev',
+    configureServer(server) {
+      server.middlewares.use('/api/palette', (req, res) => {
+        void server
+          .ssrLoadModule('/server/paletteRoutes.ts')
+          .then((mod) => {
+            const handle = mod.handlePalette as (
+              req: import('node:http').IncomingMessage,
+              res: import('node:http').ServerResponse,
+              subPath: string,
+            ) => Promise<void>;
+            return handle(req, res, req.url || '/');
+          })
+          .catch((err: unknown) => {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(
+              JSON.stringify({
+                code: -1,
+                msg: err instanceof Error ? err.message : '配色接口失败',
+                data: null,
+              }),
+            );
+          });
+      });
+    },
+  };
+}
+
+/**
  * dev 环境挂图片只读代理中间件（生产由 Express 承担），复用 server/imageProxy。
  * 表情包 canvas 切图/抠图要读跨域图片像素，经同源代理规避 CORS。
  */
@@ -96,7 +131,7 @@ export default defineConfig(({ mode }) => {
   const arcaOrigin = env.ARCA_ORIGIN ?? 'https://i18n-api.imaginewithu.com';
 
   return {
-    plugins: [react(), tailwindcss(), imageProxyPlugin(), styleCoverUploadPlugin(env)],
+    plugins: [react(), tailwindcss(), imageProxyPlugin(), styleCoverUploadPlugin(env), palettePlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, 'src'),
