@@ -17,7 +17,7 @@ import { Lightbox } from '@/components/Lightbox';
 import { ResultPanel } from '@/components/ResultPanel';
 import { IconDownload } from '@/components/icons';
 
-const RATIOS: AspectRatio[] = ['9:16', '3:4', '2:3', '1:1', '3:2', '4:3', '16:9'];
+const RATIOS: AspectRatio[] = ['1:1', '9:16', '3:4', '2:3', '3:2', '4:3', '16:9'];
 const RESOLUTIONS: Resolution[] = ['1k', '2k', '4k'];
 
 export function VisualAssetPage() {
@@ -45,6 +45,19 @@ export function VisualAssetPage() {
 
   const [detailId, setDetailId] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // 扩写词浮层（查看全部）+ 复制反馈
+  const [promptPopover, setPromptPopover] = useState<{ prompt: string; via?: 'llm' | 'mock' } | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyPrompt = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 1500);
+    } catch {
+      // 复制失败（无剪贴板权限）静默忽略，不阻断
+    }
+  };
 
   const generating = status === 'generating';
   const doneItems = items.filter((i) => i.status === 'done' && i.url);
@@ -334,6 +347,22 @@ export function VisualAssetPage() {
                           ) : (
                             <span className="rounded bg-soft px-1 text-[9px] font-semibold text-ink-3" title="模型失败，本地拼接兜底">本地兜底</span>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => void copyPrompt(item.id, item.prompt)}
+                            className="ml-auto text-[9px] text-ink-3 hover:text-ink"
+                            title="复制扩写词"
+                          >
+                            {copiedId === item.id ? '已复制' : '复制'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPromptPopover({ prompt: item.prompt, via: item.expandedVia })}
+                            className="text-[9px] text-ink-3 hover:text-ink"
+                            title="查看完整扩写词"
+                          >
+                            查看全部
+                          </button>
                         </div>
                         <p className="line-clamp-3 text-[10px] leading-snug text-ink-3">{item.prompt}</p>
                       </div>
@@ -386,8 +415,17 @@ export function VisualAssetPage() {
               {detailItem.expandedVia === 'mock' && (
                 <span className="rounded bg-soft px-1 text-[10px] text-ink-3">本地兜底</span>
               )}
+              {detailItem.prompt && (
+                <button
+                  type="button"
+                  onClick={() => void copyPrompt('detail', detailItem.prompt)}
+                  className="ml-auto pop-toggle text-[11px]"
+                >
+                  {copiedId === 'detail' ? '已复制' : '复制'}
+                </button>
+              )}
             </div>
-            <p className="rounded-pop border border-cream-line bg-code-bg p-3 text-xs leading-relaxed text-ink-2">
+            <p className="whitespace-pre-wrap break-words rounded-pop border border-cream-line bg-code-bg p-3 text-xs leading-relaxed text-ink-2">
               {detailItem.prompt || '（尚未生成）'}
             </p>
           </div>
@@ -395,6 +433,47 @@ export function VisualAssetPage() {
       )}
 
       <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+
+      {/* 扩写词浮层：查看全部 + 复制 */}
+      {promptPopover && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/45 p-4"
+          onClick={() => setPromptPopover(null)}
+        >
+          <div
+            className="max-h-[70vh] w-full max-w-md overflow-auto rounded-pop-xl border-2 border-ink bg-paper p-5 shadow-sticker-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <h2 className="font-display text-sm font-extrabold text-ink">扩写词</h2>
+              {promptPopover.via === 'llm' && (
+                <span className="rounded bg-ok/15 px-1 text-[10px] text-ok">AI 扩写</span>
+              )}
+              {promptPopover.via === 'mock' && (
+                <span className="rounded bg-soft px-1 text-[10px] text-ink-3">本地兜底</span>
+              )}
+              <button
+                type="button"
+                onClick={() => void copyPrompt('popover', promptPopover.prompt)}
+                className="ml-auto pop-toggle text-xs"
+              >
+                {copiedId === 'popover' ? '已复制' : '复制'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPromptPopover(null)}
+                className="text-ink-3 hover:text-ink"
+                aria-label="关闭"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="whitespace-pre-wrap break-words rounded-pop border border-cream-line bg-code-bg p-3 text-sm leading-relaxed text-ink-2">
+              {promptPopover.prompt}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
