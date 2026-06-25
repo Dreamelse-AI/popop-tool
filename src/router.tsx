@@ -6,6 +6,7 @@ import { VisualAssetPage } from '@/pages/VisualAssetPage';
 import { MoodPicGalleryPage } from '@/pages/MoodPicGalleryPage';
 import { StickerPage } from '@/pages/StickerPage';
 import { StylePromptPage } from '@/pages/StylePromptPage';
+import { PalettePage } from '@/pages/PalettePage';
 
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
@@ -15,4 +16,5 @@ export const router = createBrowserRouter([
   { path: '/tools/visual-asset/gallery', element: <MoodPicGalleryPage /> },
   { path: '/tools/sticker', element: <StickerPage /> },
   { path: '/tools/style-prompt', element: <StylePromptPage /> },
+  { path: '/tools/palette', element: <PalettePage /> },
 ]);
