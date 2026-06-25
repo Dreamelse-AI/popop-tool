@@ -97,6 +97,8 @@ export interface AssetResultItem {
   config: AssetConfig;
   /** 实际送去出图的 prompt（扩写后） */
   prompt: string;
+  /** prompt 来源：llm = 真实模型扩写；mock = 本地兜底拼接 */
+  expandedVia?: 'llm' | 'mock';
   status: AssetItemStatus;
   /** 成功后的图片直链 */
   url?: string;

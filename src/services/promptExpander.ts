@@ -27,28 +27,39 @@ const APIMART_BASE = '/apimart';
 /** 扩写用的文本模型。 */
 const EXPANDER_MODEL = 'gemini-3-flash-preview';
 
+/** 扩写来源：llm = 真实模型扩写成功；mock = 模型失败/未启用，本地拼接兜底。 */
+export type ExpandVia = 'llm' | 'mock';
+
+/** 扩写结果：prompt 文本 + 来源标记（便于 UI 区分真扩写/兜底）。 */
+export interface ExpandResult {
+  prompt: string;
+  via: ExpandVia;
+}
+
 /**
  * 把一条结构化配置展开成 image prompt。
  * @param config 生成引擎产出的结构化配置
  * @param styles 当前可用的自定义 style 列表（用于解析 style 片段）
  * @param signal 可选取消信号
+ * @returns { prompt, via } —— via 标明来自真实模型扩写还是本地兜底
  */
 export async function expandToPrompt(
   config: AssetConfig,
   styles: AssetOption[] = [],
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<ExpandResult> {
   if (USE_EXPANDER) {
     try {
-      return await expandViaApimart(config, styles, signal);
+      const prompt = await expandViaApimart(config, styles, signal);
+      return { prompt, via: 'llm' };
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') throw e;
       // 扩写失败兜底：退回本地拼接，保证仍能出图
       console.warn('[expander] 扩写模型调用失败，回退本地拼接：', (e as Error).message);
-      return expandMock(config, styles);
+      return { prompt: expandMock(config, styles), via: 'mock' };
     }
   }
-  return expandMock(config, styles);
+  return { prompt: expandMock(config, styles), via: 'mock' };
 }
 
 /** 收集一条配置里各层的英文要素（供扩写模型/兜底拼接共用）。 */

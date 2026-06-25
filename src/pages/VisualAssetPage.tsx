@@ -26,6 +26,7 @@ export function VisualAssetPage() {
     count,
     ratio,
     resolution,
+    concurrency,
     status,
     errorMessage,
     items,
@@ -34,8 +35,10 @@ export function VisualAssetPage() {
     setCount,
     setRatio,
     setResolution,
+    setConcurrency,
     generate,
     retryItem,
+    retryAllFailed,
     archiveItem,
     cancel,
   } = useVisualAssetStore();
@@ -45,6 +48,15 @@ export function VisualAssetPage() {
 
   const generating = status === 'generating';
   const doneItems = items.filter((i) => i.status === 'done' && i.url);
+
+  // 进度统计
+  const total = items.length;
+  const doneCount = items.filter((i) => i.status === 'done').length;
+  const errorCount = items.filter((i) => i.status === 'error').length;
+  const runningCount = items.filter((i) => i.status === 'generating').length;
+  const archivedCount = items.filter((i) => i.archiveStatus === 'archived').length;
+  const finishedCount = doneCount + errorCount;
+  const progressPct = total > 0 ? Math.round((finishedCount / total) * 100) : 0;
 
   // 当前 type：用户选了就用第一个，否则默认第一个已启用 type（决定 DNA 展开哪套）
   const activeType: AssetType = (selection.type[0] as AssetType) ?? ENABLED_TYPES[0];
@@ -133,10 +145,22 @@ export function VisualAssetPage() {
               <input
                 type="number"
                 min={1}
-                max={50}
+                max={200}
                 value={count}
                 onChange={(e) => setCount(Number(e.target.value))}
                 className="pop-input w-20 py-1.5"
+              />
+            </div>
+            <div>
+              <div className="pop-label mb-1.5">并发</div>
+              <input
+                type="number"
+                min={1}
+                max={8}
+                value={concurrency}
+                onChange={(e) => setConcurrency(Number(e.target.value))}
+                className="pop-input w-16 py-1.5"
+                title="同时进行的出图任务数（1-8）"
               />
             </div>
             <div>
@@ -195,13 +219,37 @@ export function VisualAssetPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {doneItems.length > 0 && (
-                <div className="flex items-center justify-end gap-3">
-                  <button type="button" onClick={handleDownloadAll} className="pop-link">
-                    批量下载（{doneItems.length}）
-                  </button>
+              {/* 整体进度 */}
+              <div className="rounded-pop border-2 border-ink bg-paper p-3">
+                <div className="mb-1.5 flex items-center justify-between text-xs font-semibold text-ink-2">
+                  <span>
+                    进度 {finishedCount}/{total}
+                    {runningCount > 0 && <span className="ml-1 text-ink-3">· 生成中 {runningCount}</span>}
+                  </span>
+                  <span className="tabular-nums text-ink-3">{progressPct}%</span>
                 </div>
-              )}
+                <div className="h-2 overflow-hidden rounded-full border border-cream-line bg-soft">
+                  <div
+                    className="h-full bg-ink transition-all duration-300"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                  <span className="text-ok">完成 {doneCount}</span>
+                  <span className="text-ink-3">已存档 {archivedCount}</span>
+                  {errorCount > 0 && <span className="text-err">失败 {errorCount}</span>}
+                  {errorCount > 0 && !generating && (
+                    <button type="button" onClick={() => void retryAllFailed()} className="pop-link">
+                      重试全部失败（{errorCount}）
+                    </button>
+                  )}
+                  {doneItems.length > 0 && (
+                    <button type="button" onClick={handleDownloadAll} className="pop-link ml-auto">
+                      批量下载（{doneItems.length}）
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {items.map((item) => (
                   <div
@@ -270,6 +318,19 @@ export function VisualAssetPage() {
                         </div>
                       )}
                     </div>
+                    {/* 扩写词内联展示：验证是否真扩写（AI 句子 vs 兜底词组） */}
+                    {item.prompt && (
+                      <div className="border-t border-cream-line px-2 py-1.5">
+                        <div className="mb-0.5 flex items-center gap-1">
+                          {item.expandedVia === 'llm' ? (
+                            <span className="rounded bg-ok/15 px-1 text-[9px] font-semibold text-ok" title="由 AI 扩写模型生成">AI 扩写</span>
+                          ) : (
+                            <span className="rounded bg-soft px-1 text-[9px] font-semibold text-ink-3" title="模型失败，本地拼接兜底">本地兜底</span>
+                          )}
+                        </div>
+                        <p className="line-clamp-3 text-[10px] leading-snug text-ink-3">{item.prompt}</p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -310,7 +371,15 @@ export function VisualAssetPage() {
             <pre className="mb-3 overflow-auto rounded-pop border border-cream-line bg-code-bg p-3 font-mono text-xs text-ink-2">
               {JSON.stringify(detailItem.config, null, 2)}
             </pre>
-            <div className="mb-1 text-xs font-semibold text-ink-3">展开后的 Prompt</div>
+            <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-ink-3">
+              <span>展开后的 Prompt</span>
+              {detailItem.expandedVia === 'llm' && (
+                <span className="rounded bg-ok/15 px-1 text-[10px] text-ok">AI 扩写</span>
+              )}
+              {detailItem.expandedVia === 'mock' && (
+                <span className="rounded bg-soft px-1 text-[10px] text-ink-3">本地兜底</span>
+              )}
+            </div>
             <p className="rounded-pop border border-cream-line bg-code-bg p-3 text-xs leading-relaxed text-ink-2">
               {detailItem.prompt || '（尚未生成）'}
             </p>

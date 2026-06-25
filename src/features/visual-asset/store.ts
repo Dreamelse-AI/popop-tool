@@ -11,8 +11,15 @@ import { generateImageByPrompt, ImageGenError } from '@/services/imageClient';
 import { saveMoodPic } from '@/services/moodpicGallery';
 import { useCustomStyleStore } from './customStyleStore';
 
-/** 批量生成的并发上限（小并发，避免打爆 apimart）。 */
-const CONCURRENCY = 3;
+/** 批量生成的默认并发上限（小并发，避免打爆 apimart）。 */
+const DEFAULT_CONCURRENCY = 3;
+/** 并发可选范围。 */
+const MIN_CONCURRENCY = 1;
+const MAX_CONCURRENCY = 8;
+/** 单张出图失败的自动重试次数（瞬时错误退避重试）。 */
+const AUTO_RETRY_MAX = 2;
+/** 批量数量上限（支持上百张）。 */
+const MAX_COUNT = 200;
 
 type Status = 'idle' | 'generating' | 'done' | 'error';
 
@@ -21,6 +28,8 @@ interface VisualAssetState {
   count: number;
   ratio: AspectRatio;
   resolution: Resolution;
+  /** 并发数（同时进行的出图任务数） */
+  concurrency: number;
 
   status: Status;
   errorMessage: string | null;
@@ -35,10 +44,13 @@ interface VisualAssetState {
   setCount: (n: number) => void;
   setRatio: (r: AspectRatio) => void;
   setResolution: (r: Resolution) => void;
+  setConcurrency: (n: number) => void;
   applySelection: (sel: VisualAssetSelection) => void;
   generate: () => Promise<void>;
   /** 重试单条结果项（重新扩写并出图，配置不变） */
   retryItem: (id: string) => Promise<void>;
+  /** 重试所有失败项 */
+  retryAllFailed: () => Promise<void>;
   /** 重试单条的自动存档（出图成功但存档失败时用） */
   archiveItem: (id: string) => Promise<void>;
   cancel: () => void;
@@ -77,11 +89,31 @@ const EMPTY_SELECTION: VisualAssetSelection = {
   dna: {},
 };
 
+/** 判断是否瞬时错误（可自动重试）：网关繁忙 / 超时 / 网络抖动。 */
+function isTransientError(e: unknown): boolean {
+  if (e instanceof ImageGenError) {
+    if (e.status && e.status >= 500) return true;
+    return /超时|繁忙|暂时不可用|网络/.test(e.message);
+  }
+  return e instanceof Error && /超时|繁忙|网络|timeout|network/i.test(e.message);
+}
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(t);
+      reject(new DOMException('aborted', 'AbortError'));
+    }, { once: true });
+  });
+}
+
 export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
   selection: { ...EMPTY_SELECTION },
   count: 4,
   ratio: '9:16',
   resolution: '2k',
+  concurrency: DEFAULT_CONCURRENCY,
   status: 'idle',
   errorMessage: null,
   items: [],
@@ -98,15 +130,17 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
   clearDimension: (dimension) =>
     set((s) => ({ selection: writeDim(s.selection, dimension, []) })),
 
-  setCount: (n) => set({ count: Math.max(1, Math.min(50, Math.floor(n) || 1)) }),
+  setCount: (n) => set({ count: Math.max(1, Math.min(MAX_COUNT, Math.floor(n) || 1)) }),
   setRatio: (ratio) => set({ ratio }),
   setResolution: (resolution) => set({ resolution }),
+  setConcurrency: (n) =>
+    set({ concurrency: Math.max(MIN_CONCURRENCY, Math.min(MAX_CONCURRENCY, Math.floor(n) || DEFAULT_CONCURRENCY)) }),
   applySelection: (selection) => set({ selection: { ...selection } }),
   // [GENERATE]
   generate: async () => {
     get()._abort?.abort();
     const controller = new AbortController();
-    const { selection, count, ratio, resolution } = get();
+    const { selection, count, ratio, resolution, concurrency } = get();
     const styles = useCustomStyleStore.getState().styles;
 
     const configs = generateConfigs(selection, count, styles.map((s) => s.id));
@@ -138,6 +172,44 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
       }));
     };
     // [WORKER]
+    // 单张：扩写 → 出图，带瞬时错误自动退避重试
+    const produceOne = async (item: AssetResultItem): Promise<void> => {
+      update(item.id, { status: 'generating', error: undefined });
+      for (let attempt = 0; attempt <= AUTO_RETRY_MAX; attempt++) {
+        if (controller.signal.aborted) return;
+        try {
+          const { prompt, via } = await expandToPrompt(item.config, styles, controller.signal);
+          update(item.id, { prompt, expandedVia: via });
+          const image = await generateImageByPrompt(
+            prompt,
+            { size: ratio, resolution },
+            controller.signal,
+          );
+          update(item.id, { status: 'done', url: image.url });
+          // 出图成功后自动存档（永久化），失败不影响出图结果展示
+          void get().archiveItem(item.id);
+          return;
+        } catch (e) {
+          if (e instanceof DOMException && e.name === 'AbortError') return;
+          const last = attempt === AUTO_RETRY_MAX;
+          if (!last && isTransientError(e)) {
+            // 退避：1s, 2s …
+            update(item.id, { status: 'generating', error: undefined });
+            try {
+              await delay(1000 * (attempt + 1), controller.signal);
+            } catch {
+              return; // aborted during backoff
+            }
+            continue;
+          }
+          const msg =
+            e instanceof ImageGenError ? e.message : e instanceof Error ? e.message : '生成失败';
+          update(item.id, { status: 'error', error: msg });
+          return;
+        }
+      }
+    };
+
     // 小并发 worker 池：每个 worker 依次领取下一个待处理项
     let cursor = 0;
     const runOne = async (): Promise<void> => {
@@ -145,28 +217,12 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
         if (controller.signal.aborted) return;
         const idx = cursor++;
         if (idx >= items.length) return;
-        const item = items[idx];
-        update(item.id, { status: 'generating' });
-        try {
-          const prompt = await expandToPrompt(item.config, styles, controller.signal);
-          const image = await generateImageByPrompt(
-            prompt,
-            { size: ratio, resolution },
-            controller.signal,
-          );
-          update(item.id, { status: 'done', prompt, url: image.url });
-          // 出图成功后自动存档（永久化），失败不影响出图结果展示
-          void get().archiveItem(item.id);
-        } catch (e) {
-          if (e instanceof DOMException && e.name === 'AbortError') return;
-          const msg =
-            e instanceof ImageGenError ? e.message : e instanceof Error ? e.message : '生成失败';
-          update(item.id, { status: 'error', error: msg });
-        }
+        await produceOne(items[idx]);
       }
     };
 
-    const workers = Array.from({ length: Math.min(CONCURRENCY, items.length) }, runOne);
+    const poolSize = Math.min(Math.max(1, concurrency), items.length);
+    const workers = Array.from({ length: poolSize }, runOne);
     await Promise.all(workers);
 
     if (get()._abort === controller) {
@@ -188,11 +244,11 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
     }));
 
     try {
-      const prompt = await expandToPrompt(target.config, styles, controller.signal);
+      const { prompt, via } = await expandToPrompt(target.config, styles, controller.signal);
       const image = await generateImageByPrompt(prompt, { size: ratio, resolution }, controller.signal);
       set((s) => ({
         items: s.items.map((it) =>
-          it.id === id ? { ...it, status: 'done', prompt, url: image.url } : it,
+          it.id === id ? { ...it, status: 'done', prompt, expandedVia: via, url: image.url } : it,
         ),
       }));
       void get().archiveItem(id);
@@ -202,6 +258,13 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
       set((s) => ({
         items: s.items.map((it) => (it.id === id ? { ...it, status: 'error', error: msg } : it)),
       }));
+    }
+  },
+  // [RETRY_ALL] 重试所有失败项（串行触发，复用单条重试）
+  retryAllFailed: async () => {
+    const failedIds = get().items.filter((it) => it.status === 'error').map((it) => it.id);
+    for (const id of failedIds) {
+      await get().retryItem(id);
     }
   },
   // [ARCHIVE] 出图后自动存档：前端直接调 arca /moodpic/save 登记图片 url
@@ -253,6 +316,7 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
       count: 4,
       ratio: '9:16',
       resolution: '2k',
+      concurrency: DEFAULT_CONCURRENCY,
       status: 'idle',
       errorMessage: null,
       items: [],
