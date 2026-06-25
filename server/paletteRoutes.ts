@@ -1,48 +1,21 @@
 /**
- * 情绪配色库 HTTP 处理（框架无关，传入 Node 原生 req/res）。
+ * 情绪配色库——图片上传到 OSS（框架无关，dev vite 中间件与生产 Express 共用）。
  *
- * 路由（挂载前缀 /api/palette，由调用方剥离前缀或在此按完整路径匹配）：
- *   GET    /api/palette/list              列出全部记录（倒序）
- *   POST   /api/palette/save              新增一条（body: SaveInput，含 base64 原图）
- *   DELETE /api/palette/<id>              删除一条（含原图文件）
- *   GET    /api/palette/image/<file>      读取原图（落盘文件）
+ * 复用画风封面同一套 OSS 直传能力（server/ossUpload.ts），只是落到 palette/ 子目录。
+ * 协议：POST application/json { data_url: string } → { code, msg, data: { url, object_key } }
  *
- * 为什么不用 express.Router：dev 走 vite 的 SSR module runner 加载本文件，
- * express 是 CJS 在该环境会报 `module is not defined`。故与 coverUploadHandler 同款，
- * 用 node:http 原生类型，dev 与生产共用同一处理逻辑。
- *
- * 统一信封 { code, msg, data }，code=0 成功。
+ * 设计：本工具最终走「图片传公开 OSS 拿 url + 表单元数据存后端独立接口」。
+ * 当前后端表单接口未就绪，故服务端只负责「存图拿 url」这一步（永久、公开可访问）；
+ * 表单元数据暂由前端 localStorage 过渡保存（见 src/services/paletteClient.ts）。
+ * 不再写容器本地磁盘，彻底规避此前 /app/.data 不可写导致的 500。
  */
 
-import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import {
-  readAll,
-  createRecord,
-  deleteRecord,
-  resolveImagePath,
-  PaletteError,
-  type SaveInput,
-} from './paletteStore';
+import { uploadCoverToOss, CoverUploadError } from './ossUpload';
 
-/** 原图 base64 体积上限（前端已 downscale，留足空间）。 */
+/** 请求体上限（base64 比原图大 ~33%，留足空间）。 */
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  res.statusCode = status;
-  res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify(body));
-}
-
-function ok(res: ServerResponse, data: unknown): void {
-  sendJson(res, 200, { code: 0, msg: 'ok', data });
-}
-
-function fail(res: ServerResponse, status: number, msg: string): void {
-  sendJson(res, status, { code: -1, msg, data: null });
-}
-
-/** 读取整个请求体为字符串（带大小保护）。 */
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -50,31 +23,26 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on('data', (chunk: Buffer) => {
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
+        reject(new CoverUploadError('请求体过大', 413));
         req.destroy();
-        reject(new Error('请求体过大'));
         return;
       }
       chunks.push(chunk);
     });
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    req.on('error', () => reject(new Error('读取请求失败')));
+    req.on('error', () => reject(new CoverUploadError('读取请求失败', 400)));
   });
 }
 
-/** content-type → 简单扩展名映射，用于回传原图。 */
-const CONTENT_TYPE_BY_EXT: Record<string, string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  webp: 'image/webp',
-  gif: 'image/gif',
-};
+function sendJson(res: ServerResponse, status: number, body: unknown): void {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify(body));
+}
 
 /**
- * 处理一次 /api/palette 请求。
- * @param req Node 原生请求
- * @param res Node 原生响应
- * @param subPath 已剥离 /api/palette 前缀的子路径（如 "/list"、"/image/x.png"、"/<id>"）
+ * 处理配色库图片上传：base64 → OSS（palette/ 子目录）→ 返回公开 url。
+ * @param subPath 已剥离 /api/palette 前缀的子路径；仅接受 POST /upload。
  */
 export async function handlePalette(
   req: IncomingMessage,
@@ -82,81 +50,33 @@ export async function handlePalette(
   subPath: string,
 ): Promise<void> {
   const method = (req.method ?? 'GET').toUpperCase();
-  // 去掉查询串，规整为以 / 开头无尾斜杠
   const path = subPath.split('?')[0].replace(/\/+$/, '') || '/';
 
+  if (method !== 'POST' || path !== '/upload') {
+    sendJson(res, 404, { code: -1, msg: '未知接口', data: null });
+    return;
+  }
+
   try {
-    if (method === 'GET' && path === '/list') {
-      const items = await readAll();
-      ok(res, { items, total: items.length });
-      return;
+    const raw = await readBody(req);
+    let parsed: { data_url?: string };
+    try {
+      parsed = JSON.parse(raw) as { data_url?: string };
+    } catch {
+      throw new CoverUploadError('请求体不是合法 JSON');
     }
+    if (!parsed.data_url) throw new CoverUploadError('缺少 data_url 字段');
 
-    if (method === 'POST' && path === '/save') {
-      await handleSave(req, res);
-      return;
-    }
-
-    if (method === 'GET' && path.startsWith('/image/')) {
-      handleImage(res, decodeURIComponent(path.slice('/image/'.length)));
-      return;
-    }
-
-    if (method === 'DELETE' && path.length > 1) {
-      const id = decodeURIComponent(path.slice(1));
-      await deleteRecord(id);
-      ok(res, null);
-      return;
-    }
-
-    fail(res, 404, '未知接口');
+    const result = await uploadCoverToOss({ dataUrl: parsed.data_url, subdir: 'palette/' });
+    sendJson(res, 200, {
+      code: 0,
+      msg: 'ok',
+      data: { url: result.url, object_key: result.objectKey },
+    });
   } catch (e) {
-    if (e instanceof PaletteError) {
-      fail(res, 400, e.message);
-      return;
-    }
-    console.error('[palette] 处理失败:', e instanceof Error ? e.message : e);
-    fail(res, 500, e instanceof Error ? e.message : '服务器错误');
+    const status = e instanceof CoverUploadError ? e.status : 500;
+    const msg = e instanceof Error ? e.message : '上传失败';
+    console.error('[palette] 图片上传失败:', msg);
+    sendJson(res, status, { code: status === 200 ? -1 : status, msg, data: null });
   }
-}
-
-async function handleSave(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const raw = await readBody(req);
-  let body: Partial<SaveInput>;
-  try {
-    body = JSON.parse(raw) as Partial<SaveInput>;
-  } catch {
-    fail(res, 400, '请求体不是合法 JSON');
-    return;
-  }
-  if (typeof body.id !== 'string' || typeof body.imageDataUrl !== 'string') {
-    fail(res, 400, '缺少必填字段 id / imageDataUrl');
-    return;
-  }
-  if (!Array.isArray(body.schemes) || body.schemes.length === 0) {
-    fail(res, 400, '缺少配色方案 schemes');
-    return;
-  }
-  const record = await createRecord({
-    id: body.id,
-    name: body.name ?? '',
-    schemes: body.schemes,
-    colors: Array.isArray(body.colors) ? body.colors : [],
-    imageDataUrl: body.imageDataUrl,
-  });
-  ok(res, record);
-}
-
-function handleImage(res: ServerResponse, file: string): void {
-  const abs = resolveImagePath(file);
-  if (!abs || !fs.existsSync(abs)) {
-    fail(res, 404, '图片不存在');
-    return;
-  }
-  const ext = file.split('.').pop()?.toLowerCase() ?? '';
-  const type = CONTENT_TYPE_BY_EXT[ext] ?? 'application/octet-stream';
-  res.statusCode = 200;
-  res.setHeader('Content-Type', type);
-  res.setHeader('Cache-Control', 'public, max-age=86400');
-  fs.createReadStream(abs).pipe(res);
 }

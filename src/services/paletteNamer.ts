@@ -16,15 +16,16 @@ const NAMER_MODEL = 'gemini-3-flash-preview';
 /** AI 命名返回结构。 */
 export interface NamingResult {
   id: string;
-  name: string;
+  /** 两套方案各自的名字（[方案A, 方案B]，均 ≤4 字） */
+  names: [string, string];
   /** 两套方案各自的情绪词（[方案A, 方案B]） */
   moods: [string, string];
 }
 
 /**
- * 给一组主色起名，并为两套方案分别定情绪词。
+ * 给一组主色起名，并为两套方案分别定名字与情绪词。
  * @param colors 主色 hex 数组（占比从高到低）
- * @param schemeBgColors 两套方案的底色 [A, B]，让情绪贴合各自基调
+ * @param schemeBgColors 两套方案的底色 [A, B]，让命名/情绪贴合各自基调
  * @param signal 可选取消信号
  */
 export async function nameColors(
@@ -47,13 +48,14 @@ async function nameViaApimart(
   signal?: AbortSignal,
 ): Promise<NamingResult> {
   const userContent = [
-    '你是一名资深品牌视觉与色彩设计师。根据给定的主色板，输出配色方案的命名与两套方案的情绪词。',
-    '同一组颜色有两套方案：方案A 以颜色1为底，方案B 以颜色2为底，基调不同、情绪可不同。',
+    '你是一名资深品牌视觉与色彩设计师。同一组颜色有两套配色方案：',
+    '方案A 以颜色1为底，方案B 以颜色2为底，基调不同，需各自独立命名与定情绪。',
     '严格只返回一个 JSON 对象，不要任何解释、不要 markdown 代码块包裹。JSON 字段：',
     '- "id": 英文小写连字符 slug（2-4 个单词，如 "warm-dusk-glow"），只含 a-z 0-9 和连字符。',
-    '- "name": 中文名字，最多 4 个字，富有画面感（如「暮色微醺」「青苔」）。绝不超过 4 字。',
-    '- "moodA": 方案A（底色 ' + schemeBgColors[0] + '）的情绪词，2-4 个中文词用「、」分隔。',
-    '- "moodB": 方案B（底色 ' + schemeBgColors[1] + '）的情绪词，2-4 个中文词用「、」分隔。',
+    '- "nameA": 方案A（底色 ' + schemeBgColors[0] + '）的中文名字，最多 4 字，富有画面感。绝不超过 4 字。',
+    '- "nameB": 方案B（底色 ' + schemeBgColors[1] + '）的中文名字，最多 4 字，富有画面感。绝不超过 4 字。',
+    '- "moodA": 方案A 的情绪词，2-4 个中文词用「、」分隔。',
+    '- "moodB": 方案B 的情绪词，2-4 个中文词用「、」分隔。',
     '',
     `主色板（hex，按占比从高到低）：${colors.join(', ')}`,
   ].join('\n');
@@ -150,15 +152,17 @@ function slugify(raw: string): string {
 function normalize(obj: Record<string, unknown>, colors: string[]): NamingResult {
   const fallback = nameMock(colors);
   const id = typeof obj.id === 'string' && obj.id.trim() ? slugify(obj.id) : fallback.id;
-  const rawName =
-    typeof obj.name === 'string' && obj.name.trim() ? obj.name.trim() : fallback.name;
+  const nameA =
+    typeof obj.nameA === 'string' && obj.nameA.trim() ? clampName(obj.nameA.trim()) : fallback.names[0];
+  const nameB =
+    typeof obj.nameB === 'string' && obj.nameB.trim() ? clampName(obj.nameB.trim()) : nameA;
   const moodA =
     typeof obj.moodA === 'string' && obj.moodA.trim() ? obj.moodA.trim() : fallback.moods[0];
   const moodB =
     typeof obj.moodB === 'string' && obj.moodB.trim() ? obj.moodB.trim() : moodA;
   return {
     id: id || fallback.id,
-    name: clampName(rawName),
+    names: [nameA, nameB],
     moods: [moodA, moodB],
   };
 }
@@ -185,7 +189,7 @@ function nameMock(_colors: string[]): NamingResult {
   const suffix = Math.random().toString(36).slice(2, 6);
   return {
     id: `palette-${suffix}`,
-    name: '未命名',
+    names: ['未命名', '未命名'],
     moods: ['中性', '中性'],
   };
 }

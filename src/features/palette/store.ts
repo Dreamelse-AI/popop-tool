@@ -11,7 +11,7 @@
 
 import { create } from 'zustand';
 import type { PaletteDraft, PaletteEntry, PaletteScheme } from '@/types/palette';
-import { listPalettes, savePalette, deletePalette } from '@/services/paletteClient';
+import { listPalettes, savePalette, deletePalette, uploadPaletteImage } from '@/services/paletteClient';
 import { extractPalette } from '@/services/paletteExtractor';
 import { nameColors } from '@/services/paletteNamer';
 import { fileToDataUrl } from './fileToDataUrl';
@@ -112,10 +112,9 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
           const draft: DraftItem = {
             key: nextKey(),
             id: uniqueId(naming.id, get()),
-            name: naming.name,
             schemes: [
-              { ...schemes[0], mood: naming.moods[0] },
-              { ...schemes[1], mood: naming.moods[1] },
+              { ...schemes[0], name: naming.names[0], mood: naming.moods[0] },
+              { ...schemes[1], name: naming.names[1], mood: naming.moods[1] },
             ],
             colors,
             imageDataUrl,
@@ -180,12 +179,12 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
       drafts: s.drafts.map((d) => (d.key === key ? { ...d, saving: true, error: null } : d)),
     }));
     try {
+      const imageUrl = await uploadPaletteImage(draft.imageDataUrl);
       await savePalette({
         id: draft.id,
-        name: draft.name,
         schemes: draft.schemes,
         colors: draft.colors,
-        imageDataUrl: draft.imageDataUrl,
+        imageUrl,
       });
       // 保存成功：移除该草稿
       set((s) => ({ drafts: s.drafts.filter((d) => d.key !== key) }));
