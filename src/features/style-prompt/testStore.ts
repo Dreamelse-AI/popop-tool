@@ -26,11 +26,15 @@ export interface TestResultItem {
 }
 
 interface StyleTestState {
+  /** 画风名称（可直接编辑，新增到画风库时用）。 */
+  styleName: string;
+  /** 画风封面图 URL（上传 OSS 后回填）。 */
+  styleIcon: string;
   /** 画风 prompt（从画风库选中带入，或手动编辑）。 */
   stylePromptText: string;
-  /** 画风名称（带入用于「存为画风」默认名）。 */
-  styleNameHint: string;
-  /** 人物 / 其他附加提示词。 */
+  /** 优先级。 */
+  priority: number;
+  /** 人物 / 其他附加提示词（仅测试用，不入库）。 */
   extraPrompt: string;
   count: number;
   ratio: string;
@@ -42,14 +46,21 @@ interface StyleTestState {
 
   _abort: AbortController | null;
 
+  setStyleName: (v: string) => void;
+  setStyleIcon: (v: string) => void;
   setStylePromptText: (v: string) => void;
-  setStyleNameHint: (v: string) => void;
+  setPriority: (n: number) => void;
   setExtraPrompt: (v: string) => void;
   setCount: (n: number) => void;
   setRatio: (r: string) => void;
   setResolution: (r: string) => void;
-  /** 从画风库选一条带入测试。 */
-  loadFromStyle: (styleName: string, stylePrompt: string) => void;
+  /** 从画风库选一条带入测试（带入全部画风字段，便于改完直接新增为新画风）。 */
+  loadFromStyle: (input: {
+    styleName: string;
+    styleIcon: string;
+    stylePrompt: string;
+    priority: number;
+  }) => void;
   generate: () => Promise<void>;
   retryItem: (id: string) => Promise<void>;
   cancel: () => void;
@@ -62,8 +73,10 @@ export function buildTestPrompt(stylePrompt: string, extra: string): string {
 }
 
 export const useStyleTestStore = create<StyleTestState>((set, get) => ({
+  styleName: '',
+  styleIcon: '',
   stylePromptText: '',
-  styleNameHint: '',
+  priority: 0,
   extraPrompt: '',
   count: 1,
   ratio: '1:1',
@@ -73,14 +86,21 @@ export const useStyleTestStore = create<StyleTestState>((set, get) => ({
   items: [],
   _abort: null,
 
+  setStyleName: (v) => set({ styleName: v }),
+  setStyleIcon: (v) => set({ styleIcon: v }),
   setStylePromptText: (v) => set({ stylePromptText: v }),
-  setStyleNameHint: (v) => set({ styleNameHint: v }),
+  setPriority: (n) => set({ priority: Math.floor(n) || 0 }),
   setExtraPrompt: (v) => set({ extraPrompt: v }),
   setCount: (n) => set({ count: Math.max(1, Math.min(20, Math.floor(n) || 1)) }),
   setRatio: (ratio) => set({ ratio }),
   setResolution: (resolution) => set({ resolution }),
-  loadFromStyle: (styleName, stylePrompt) =>
-    set({ styleNameHint: styleName, stylePromptText: stylePrompt }),
+  loadFromStyle: (input) =>
+    set({
+      styleName: input.styleName,
+      styleIcon: input.styleIcon,
+      stylePromptText: input.stylePrompt,
+      priority: input.priority,
+    }),
 
   generate: async () => {
     get()._abort?.abort();
@@ -176,6 +196,16 @@ export const useStyleTestStore = create<StyleTestState>((set, get) => ({
 
   reset: () => {
     get()._abort?.abort();
-    set({ items: [], status: 'idle', errorMessage: null, _abort: null });
+    set({
+      styleName: '',
+      styleIcon: '',
+      stylePromptText: '',
+      priority: 0,
+      extraPrompt: '',
+      items: [],
+      status: 'idle',
+      errorMessage: null,
+      _abort: null,
+    });
   },
 }));
