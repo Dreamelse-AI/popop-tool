@@ -133,12 +133,14 @@ async function handleSave(req: IncomingMessage, res: ServerResponse): Promise<vo
     fail(res, 400, '缺少必填字段 id / imageDataUrl');
     return;
   }
+  if (!Array.isArray(body.schemes) || body.schemes.length === 0) {
+    fail(res, 400, '缺少配色方案 schemes');
+    return;
+  }
   const record = await createRecord({
     id: body.id,
     name: body.name ?? '',
-    mood: body.mood ?? '',
-    bgColor: body.bgColor ?? '',
-    fontColor: body.fontColor ?? '',
+    schemes: body.schemes,
     colors: Array.isArray(body.colors) ? body.colors : [],
     imageDataUrl: body.imageDataUrl,
   });

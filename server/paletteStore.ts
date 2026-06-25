@@ -13,17 +13,20 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-/** 一条配色记录（与前端 PaletteEntry 对齐，snake/camel 在路由层不转换，直接用 camel）。 */
+/** 一套配色方案：底色 + 字色 + 情绪词。 */
+export interface PaletteScheme {
+  bgColor: string;
+  fontColor: string;
+  mood: string;
+}
+
+/** 一条配色记录（与前端 PaletteEntry 对齐，camelCase，路由层不转换）。 */
 export interface PaletteRecord {
   /** 英文连字符 id，同时作为原图文件名 */
   id: string;
   name: string;
-  /** 情绪词（可多个，逗号分隔由前端决定） */
-  mood: string;
-  /** 背景：#色值 或 CSS 渐变字符串 */
-  bgColor: string;
-  /** 字体色：#色值 */
-  fontColor: string;
+  /** 两套配色方案（互换底/字，情绪词可不同） */
+  schemes: PaletteScheme[];
   /** 从原图提取的主色板（hex 数组） */
   colors: string[];
   /** 原图访问路径（同源 /api/palette/image/<id>.<ext>） */
@@ -72,13 +75,45 @@ async function ensureDirs(): Promise<void> {
 export async function readAll(): Promise<PaletteRecord[]> {
   try {
     const raw = await fs.readFile(DB_FILE, 'utf8');
-    const list = JSON.parse(raw) as PaletteRecord[];
+    const list = JSON.parse(raw) as unknown[];
     if (!Array.isArray(list)) return [];
-    return list;
+    return list.map(migrateRecord);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw e;
   }
+}
+
+/**
+ * 旧记录兼容：早期是扁平 { mood, bgColor, fontColor }，新版是 schemes[]。
+ * 读到旧结构时就地转成单方案 + 自动补一套互换方案，保证前端只处理 schemes[]。
+ */
+function migrateRecord(raw: unknown): PaletteRecord {
+  const r = raw as Record<string, unknown> & {
+    schemes?: PaletteScheme[];
+    bgColor?: string;
+    fontColor?: string;
+    mood?: string;
+  };
+  if (Array.isArray(r.schemes) && r.schemes.length > 0) {
+    return r as unknown as PaletteRecord;
+  }
+  const bg = typeof r.bgColor === 'string' ? r.bgColor : '#ffffff';
+  const fg = typeof r.fontColor === 'string' ? r.fontColor : '#0b0b0b';
+  const mood = typeof r.mood === 'string' ? r.mood : '';
+  const schemes: PaletteScheme[] = [
+    { bgColor: bg, fontColor: fg, mood },
+    { bgColor: fg, fontColor: bg, mood },
+  ];
+  return {
+    id: String(r.id ?? ''),
+    name: String(r.name ?? ''),
+    schemes,
+    colors: Array.isArray(r.colors) ? (r.colors as string[]) : [],
+    imageUrl: String(r.imageUrl ?? ''),
+    imageFile: String(r.imageFile ?? ''),
+    createdAt: String(r.createdAt ?? new Date().toISOString()),
+  };
 }
 
 /** 原子写整库：先写临时文件再 rename。 */
@@ -116,9 +151,7 @@ function parseDataUrl(dataUrl: string): { buffer: Buffer; ext: string } | null {
 export interface SaveInput {
   id: string;
   name: string;
-  mood: string;
-  bgColor: string;
-  fontColor: string;
+  schemes: PaletteScheme[];
   colors: string[];
   /** 原图 base64 data URL */
   imageDataUrl: string;
@@ -152,9 +185,7 @@ export async function createRecord(input: SaveInput): Promise<PaletteRecord> {
     const record: PaletteRecord = {
       id: input.id,
       name: input.name,
-      mood: input.mood,
-      bgColor: input.bgColor,
-      fontColor: input.fontColor,
+      schemes: input.schemes,
       colors: input.colors,
       imageFile,
       imageUrl: `/api/palette/image/${imageFile}`,

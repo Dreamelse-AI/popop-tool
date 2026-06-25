@@ -10,7 +10,7 @@
  */
 
 import { create } from 'zustand';
-import type { PaletteDraft, PaletteEntry } from '@/types/palette';
+import type { PaletteDraft, PaletteEntry, PaletteScheme } from '@/types/palette';
 import { listPalettes, savePalette, deletePalette } from '@/services/paletteClient';
 import { extractPalette } from '@/services/paletteExtractor';
 import { nameColors } from '@/services/paletteNamer';
@@ -48,6 +48,10 @@ interface PaletteState {
   analyzeFiles: (files: File[]) => Promise<void>;
   /** 编辑某条草稿字段 */
   updateDraft: (key: string, patch: Partial<PaletteDraft>) => void;
+  /** 编辑某条草稿里某套方案的字段（schemeIndex: 0|1） */
+  updateScheme: (key: string, schemeIndex: number, patch: Partial<PaletteScheme>) => void;
+  /** 互换某条草稿里某套方案的底色/字色 */
+  swapScheme: (key: string, schemeIndex: number) => void;
   /** 丢弃某条草稿 */
   discardDraft: (key: string) => void;
   /** 丢弃全部草稿 */
@@ -100,15 +104,19 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
       images.map(async (file) => {
         try {
           const imageDataUrl = await fileToDataUrl(file);
-          const { colors, bgColor, fontColor } = await extractPalette(imageDataUrl);
-          const naming = await nameColors(colors);
+          const { colors, schemes } = await extractPalette(imageDataUrl);
+          const naming = await nameColors(colors, [
+            schemes[0].bgColor,
+            schemes[1].bgColor,
+          ]);
           const draft: DraftItem = {
             key: nextKey(),
             id: uniqueId(naming.id, get()),
             name: naming.name,
-            mood: naming.mood,
-            bgColor,
-            fontColor,
+            schemes: [
+              { ...schemes[0], mood: naming.moods[0] },
+              { ...schemes[1], mood: naming.moods[1] },
+            ],
             colors,
             imageDataUrl,
             saving: false,
@@ -130,6 +138,36 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
       drafts: s.drafts.map((d) => (d.key === key ? { ...d, ...patch } : d)),
     })),
 
+  updateScheme: (key, schemeIndex, patch) =>
+    set((s) => ({
+      drafts: s.drafts.map((d) =>
+        d.key === key
+          ? {
+              ...d,
+              schemes: d.schemes.map((sc, i) =>
+                i === schemeIndex ? { ...sc, ...patch } : sc,
+              ),
+            }
+          : d,
+      ),
+    })),
+
+  swapScheme: (key, schemeIndex) =>
+    set((s) => ({
+      drafts: s.drafts.map((d) =>
+        d.key === key
+          ? {
+              ...d,
+              schemes: d.schemes.map((sc, i) =>
+                i === schemeIndex
+                  ? { ...sc, bgColor: sc.fontColor, fontColor: sc.bgColor }
+                  : sc,
+              ),
+            }
+          : d,
+      ),
+    })),
+
   discardDraft: (key) =>
     set((s) => ({ drafts: s.drafts.filter((d) => d.key !== key) })),
 
@@ -145,9 +183,7 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
       await savePalette({
         id: draft.id,
         name: draft.name,
-        mood: draft.mood,
-        bgColor: draft.bgColor,
-        fontColor: draft.fontColor,
+        schemes: draft.schemes,
         colors: draft.colors,
         imageDataUrl: draft.imageDataUrl,
       });
