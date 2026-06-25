@@ -4,8 +4,9 @@
  * 把 /arca/* 转发到 arca 海外后端（默认 https://i18n-api.imaginewithu.com）。
  * 生产前端只请求同源 /arca/*，由本代理转发，规避浏览器 CORS。
  *
- * 鉴权说明：图库相关接口后端将豁免 JWT；若后续需带 JWT，可在此注入
- * Authorization 头（从环境变量读取服务端持有的 token），key 不进前端 bundle。
+ * 鉴权说明：MoodPic 图库 / 画风管理走 /admin/api/*，需请求头 X-Admin-Token。
+ * 口令从环境变量 ADMIN_API_TOKEN 读取，仅在本反代层注入，绝不进前端 bundle。
+ * （若后续需带 JWT，可在此追加 Authorization 头。）
  *
  * 用 Node 原生 http/https 透传，流式 pipe 请求体与响应体。
  */
@@ -15,6 +16,7 @@ import http from 'node:http';
 import type { Request, Response } from 'express';
 
 const ARCA_ORIGIN = process.env.ARCA_ORIGIN ?? 'https://i18n-api.imaginewithu.com';
+const ADMIN_API_TOKEN = process.env.ADMIN_API_TOKEN ?? '';
 
 /** 上游超时。 */
 const UPSTREAM_TIMEOUT_MS = 30_000;
@@ -31,6 +33,8 @@ export function createArcaProxy() {
       ...filterHeaders(req.headers),
       host: target.host,
     };
+    // 注入后台管理口令（前端不持有），仅对 /admin/api/* 生效即可全量带上无副作用
+    if (ADMIN_API_TOKEN) headers['x-admin-token'] = ADMIN_API_TOKEN;
 
     const options: https.RequestOptions = {
       protocol: target.protocol,

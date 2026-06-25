@@ -1,120 +1,52 @@
 /**
- * 画风配置服务：列表 / 新增 / 修改 / 删除。
+ * 画风管理服务：列表 / 保存（新建+更新）/ 启停 / 删除 / 图标上传。
  *
- * 对接 arca.api 运营侧画风配置接口（@server group: internal_ops，无 JWT 鉴权）：
- *   - POST /internal/ops/style_prompt/list   → ListStylePromptResp
- *   - POST /internal/ops/style_prompt/create → CreateStylePromptResp
- *   - POST /internal/ops/style_prompt/update → UpdateStylePromptResp（空）
- *   - POST /internal/ops/style_prompt/delete → DeleteStylePromptResp（空）
+ * 对接后台接口 /admin/api/style_prompts*（X-Admin-Token 鉴权，由反代层注入）：
+ *   - GET  /admin/api/style_prompts             → { items: [...] }  全部未删画风（含停用）
+ *   - POST /admin/api/style_prompts/save        → { ok, id }        id 空/"0" 新建，否则更新
+ *   - POST /admin/api/style_prompts/toggle      → { ok }            启用/停用
+ *   - POST /admin/api/style_prompts/delete      → { ok }            软删
+ *   - POST /admin/api/style_prompts/upload_icon → StorageObject     multipart 图标上传（暂存）
  *
- * 数据源：dreamelse.config_character_style_prompt 表。
- * 字段 snake_case 严格对齐 .api，这里做 snake_case ↔ 驼峰映射。
- * 走统一封装 arcaPost（同源 /arca 反代，解 {code,msg,data} 信封）。
+ * ⚠️ 这组接口是「裸 JSON + HTTP 状态码」风格（与 MoodPic 信封不同），统一走 arcaAdmin*。
+ * 字段 snake_case 严格对齐文档，这里做 snake_case ↔ 驼峰映射。
  */
 
 import type {
   StylePrompt,
   StylePromptStatus,
-  CreateStylePromptInput,
-  UpdateStylePromptInput,
+  StylePromptLanguage,
+  StorageObject,
+  SaveStylePromptInput,
 } from '@/types/stylePrompt';
-import { arcaPost } from './arcaClient';
+import { arcaAdmin, arcaAdminUpload } from './arcaClient';
 
-/**
- * 接入开关（过渡期）。
- *   true  → 本地 localStorage 临时画风库（后端 internal 接口经公网网关 504、且后端将重搭新框架，先让前端跑通）
- *   false → 走真实 arca 接口（后端新框架/对外接口就绪后置 false 即可，UI 不动）
- */
-const USE_MOCK = true;
+const BASE = '/admin/api/style_prompts';
 
-// ==================== 本地 mock 实现（localStorage） ====================
-const LOCAL_KEY = 'popop-style-prompt-library';
-
-function readLocal(): StylePrompt[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_KEY);
-    return raw ? (JSON.parse(raw) as StylePrompt[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeLocal(items: StylePrompt[]): void {
-  try {
-    localStorage.setItem(LOCAL_KEY, JSON.stringify(items));
-  } catch {
-    // 忽略写入失败（如配额满），不阻断主流程
-  }
-}
-
-/** 按优先级降序、其次新创建在前。 */
-function sortLocal(items: StylePrompt[]): StylePrompt[] {
-  return [...items].sort((a, b) => b.priority - a.priority || b.id - a.id);
-}
-
-function listLocal(): StylePrompt[] {
-  return sortLocal(readLocal());
-}
-
-function createLocal(input: CreateStylePromptInput): number {
-  const now = new Date().toISOString();
-  const id = Date.now();
-  const item: StylePrompt = {
-    id,
-    styleName: input.styleName,
-    styleIcon: input.styleIcon ?? '',
-    stylePrompt: input.stylePrompt ?? '',
-    priority: input.priority,
-    status: 1,
-    createdAt: now,
-    updatedAt: now,
-  };
-  writeLocal([item, ...readLocal()]);
-  return id;
-}
-
-function updateLocal(input: UpdateStylePromptInput): void {
-  const now = new Date().toISOString();
-  writeLocal(
-    readLocal().map((it) =>
-      it.id === input.id
-        ? {
-            ...it,
-            styleName: input.styleName ?? it.styleName,
-            styleIcon: input.styleIcon ?? it.styleIcon,
-            stylePrompt: input.stylePrompt ?? it.stylePrompt,
-            priority: input.priority ?? it.priority,
-            updatedAt: now,
-          }
-        : it,
-    ),
-  );
-}
-
-function deleteLocal(id: number): void {
-  writeLocal(readLocal().filter((it) => it.id !== id));
-}
-
-// ==================== arca 契约对接 ====================
-
-/** arca 契约：OpsStylePromptItem（snake_case 原样）。 */
-interface OpsStylePromptItem {
-  id: number;
+/** 后端列表项（snake_case 原样，id 为字符串）。 */
+interface AdminStylePromptItem {
+  id: string;
   style_name: string;
-  style_icon: string;
   style_prompt: string;
   priority: number;
   status: number;
+  language: string;
+  style_icon: string;
   created_at: string;
   updated_at: string;
 }
 
-interface ListStylePromptResp {
-  items: OpsStylePromptItem[] | null;
+interface ListResp {
+  items: AdminStylePromptItem[] | null;
+}
+
+/** 归一语言字段（未知值按通用 "" 处理）。 */
+function toLanguage(v: string): StylePromptLanguage {
+  return v === 'ja' || v === 'ko' || v === 'en' ? v : '';
 }
 
 /** 契约 item → 前端 StylePrompt。 */
-function toStylePrompt(it: OpsStylePromptItem): StylePrompt {
+function toStylePrompt(it: AdminStylePromptItem): StylePrompt {
   return {
     id: it.id,
     styleName: it.style_name ?? '',
@@ -122,91 +54,82 @@ function toStylePrompt(it: OpsStylePromptItem): StylePrompt {
     stylePrompt: it.style_prompt ?? '',
     priority: it.priority ?? 0,
     status: (it.status === 2 ? 2 : 1) as StylePromptStatus,
+    language: toLanguage(it.language ?? ''),
     createdAt: it.created_at ?? '',
     updatedAt: it.updated_at ?? '',
   };
 }
 
 /**
- * 列出全部画风（后端按优先级降序）。
- * 对应：POST /internal/ops/style_prompt/list
+ * 列出全部未删画风（含停用），后端按 priority DESC, id DESC。
+ * GET /admin/api/style_prompts
  */
 export async function listStylePrompts(signal?: AbortSignal): Promise<StylePrompt[]> {
-  if (USE_MOCK) return listLocal();
-  const data = await arcaPost<Record<string, never>, ListStylePromptResp>(
-    '/internal/ops/style_prompt/list',
-    {},
-    signal,
-  );
-  return (data.items ?? []).map(toStylePrompt);
+  const data = await arcaAdmin<ListResp>(BASE, { method: 'GET', signal });
+  return (data?.items ?? []).map(toStylePrompt);
 }
 
 /**
- * 新增画风，返回新建 ID。
- * 对应：POST /internal/ops/style_prompt/create（CreateStylePromptReq）
+ * 保存画风（新建 / 更新）。id 空或 "0" → 新建；否则按 id 更新。
+ * POST /admin/api/style_prompts/save → { ok, id }
+ * 返回保存后的画风 id（字符串）。
  */
-export async function createStylePrompt(
-  input: CreateStylePromptInput,
+export async function saveStylePrompt(
+  input: SaveStylePromptInput,
   signal?: AbortSignal,
-): Promise<number> {
-  if (USE_MOCK) return createLocal(input);
-  const data = await arcaPost<
-    {
-      style_name: string;
-      style_icon: string;
-      style_prompt: string;
-      priority: number;
-    },
-    { id: number }
-  >(
-    '/internal/ops/style_prompt/create',
-    {
-      style_name: input.styleName,
-      style_icon: input.styleIcon ?? '',
-      style_prompt: input.stylePrompt ?? '',
-      priority: input.priority,
-    },
-    signal,
-  );
-  return data.id;
-}
+): Promise<string> {
+  const body: Record<string, unknown> = {
+    id: input.id ?? '',
+    style_name: input.styleName,
+    style_prompt: input.stylePrompt,
+    priority: input.priority,
+    status: input.status,
+    language: input.language,
+  };
+  // 仅本次换图时带 style_icon（StorageObject）；不传 = 保持原图标
+  if (input.styleIcon) body.style_icon = input.styleIcon;
 
-/**
- * 修改画风（除 id 外字段可选，仅传需要改的）。
- * 对应：POST /internal/ops/style_prompt/update（UpdateStylePromptReq）
- */
-export async function updateStylePrompt(
-  input: UpdateStylePromptInput,
-  signal?: AbortSignal,
-): Promise<void> {
-  if (USE_MOCK) {
-    updateLocal(input);
-    return;
-  }
-  const body: Record<string, unknown> = { id: input.id };
-  if (input.styleName !== undefined) body.style_name = input.styleName;
-  if (input.styleIcon !== undefined) body.style_icon = input.styleIcon;
-  if (input.stylePrompt !== undefined) body.style_prompt = input.stylePrompt;
-  if (input.priority !== undefined) body.priority = input.priority;
-  await arcaPost<Record<string, unknown>, Record<string, never>>(
-    '/internal/ops/style_prompt/update',
+  const data = await arcaAdmin<{ ok: boolean; id: string }>(`${BASE}/save`, {
+    method: 'POST',
     body,
     signal,
-  );
+  });
+  return data?.id ?? input.id ?? '';
 }
 
 /**
- * 删除画风。
- * 对应：POST /internal/ops/style_prompt/delete（DeleteStylePromptReq）
+ * 启用 / 停用画风。
+ * POST /admin/api/style_prompts/toggle → { ok }
  */
-export async function deleteStylePrompt(id: number, signal?: AbortSignal): Promise<void> {
-  if (USE_MOCK) {
-    deleteLocal(id);
-    return;
-  }
-  await arcaPost<{ id: number }, Record<string, never>>(
-    '/internal/ops/style_prompt/delete',
-    { id },
+export async function toggleStylePrompt(
+  id: string,
+  status: StylePromptStatus,
+  signal?: AbortSignal,
+): Promise<void> {
+  await arcaAdmin<{ ok: boolean }>(`${BASE}/toggle`, {
+    method: 'POST',
+    body: { id, status },
     signal,
-  );
+  });
+}
+
+/**
+ * 删除画风（软删）。
+ * POST /admin/api/style_prompts/delete → { ok }
+ */
+export async function deleteStylePrompt(id: string, signal?: AbortSignal): Promise<void> {
+  await arcaAdmin<{ ok: boolean }>(`${BASE}/delete`, {
+    method: 'POST',
+    body: { id },
+    signal,
+  });
+}
+
+/**
+ * 上传画风图标（暂存），返回 StorageObject。
+ * 仅在 save 成功后图标才真正生效（把整个对象原样作为 save 的 style_icon 传回）。
+ * POST /admin/api/style_prompts/upload_icon（multipart，字段名 file）
+ */
+export async function uploadStyleIcon(file: File, signal?: AbortSignal): Promise<StorageObject> {
+  return arcaAdminUpload<StorageObject>(`${BASE}/upload_icon`, file, signal);
 }

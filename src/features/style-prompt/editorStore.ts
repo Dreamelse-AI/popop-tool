@@ -2,24 +2,37 @@
  * 画风工作台 store：三列布局的「选中项 + 草稿 + 脏标记」状态机。
  *
  * 选中项可能是：
- *   - 一条已存画风（key = 数字 id）
+ *   - 一条已存画风（key = 字符串 id）
  *   - 一个草稿（key = `draft-xxx`，尚未入库）
- * 中间面板编辑的是「当前选中项的缓冲副本」(draftFields)，与原值对比得出 dirty，
+ * 中间面板编辑的是「当前选中项的缓冲副本」(fields)，与 baseline 对比得出 dirty，
  * 决定「保存」按钮是否亮起。草稿态右上角显示「新增到画风库」，已存态显示「删除 + 保存」。
+ *
+ * 图标两步法：用户选新图 → 调 upload_icon 拿 StorageObject 暂存到 pendingIcon（同时本地预览 iconPreview），
+ * 真正生效在 save（把 pendingIcon 作为 style_icon 传回）。
  */
 
 import { create } from 'zustand';
-import type { StylePrompt } from '@/types/stylePrompt';
+import type {
+  StylePrompt,
+  StylePromptStatus,
+  StylePromptLanguage,
+  StorageObject,
+} from '@/types/stylePrompt';
 
-/** 选中项的 key：数字 id（已存画风）或 draft 字符串（草稿）。 */
-export type SelectionKey = number | string;
+/** 选中项的 key：字符串 id（已存画风）或 draft 字符串（草稿）。 */
+export type SelectionKey = string;
 
 /** 中间面板正在编辑的画风字段。 */
 export interface StyleFields {
   styleName: string;
-  styleIcon: string;
   stylePrompt: string;
   priority: number;
+  status: StylePromptStatus;
+  language: StylePromptLanguage;
+  /** 当前封面预览 URL（已存图标签名直链，或新上传图标的临时 url）。 */
+  iconPreview: string;
+  /** 本次新上传的图标对象（save 时作为 style_icon 传回）；null = 未换图。 */
+  pendingIcon: StorageObject | null;
 }
 
 /** 一个未入库的草稿。 */
@@ -30,26 +43,35 @@ export interface StyleDraft {
 
 const EMPTY_FIELDS: StyleFields = {
   styleName: '',
-  styleIcon: '',
   stylePrompt: '',
   priority: 0,
+  status: 1,
+  language: '',
+  iconPreview: '',
+  pendingIcon: null,
 };
 
 function fieldsFromStyle(s: StylePrompt): StyleFields {
   return {
     styleName: s.styleName,
-    styleIcon: s.styleIcon,
     stylePrompt: s.stylePrompt,
     priority: s.priority,
+    status: s.status,
+    language: s.language,
+    iconPreview: s.styleIcon,
+    pendingIcon: null,
   };
 }
 
 function fieldsEqual(a: StyleFields, b: StyleFields): boolean {
   return (
     a.styleName === b.styleName &&
-    a.styleIcon === b.styleIcon &&
     a.stylePrompt === b.stylePrompt &&
-    a.priority === b.priority
+    a.priority === b.priority &&
+    a.status === b.status &&
+    a.language === b.language &&
+    // 换了新图标即视为脏；iconPreview 仅预览不参与（已通过 pendingIcon 体现）
+    (a.pendingIcon?.url ?? '') === (b.pendingIcon?.url ?? '')
   );
 }
 
@@ -78,6 +100,10 @@ interface StyleEditorState {
   removeDraft: (key: string) => void;
   /** 更新编辑缓冲中的字段。 */
   setField: <K extends keyof StyleFields>(key: K, value: StyleFields[K]) => void;
+  /** 设置新上传的图标（同时更新预览）。 */
+  setPendingIcon: (obj: StorageObject) => void;
+  /** 清空图标（移除当前封面，且不带新图标）。 */
+  clearIcon: () => void;
   /** 把 baseline 重置为当前 fields（保存成功后调，清掉 dirty）。 */
   commitBaseline: () => void;
   /** 初始化：列表加载后若无选中，默认建一个草稿并选中。 */
@@ -90,7 +116,10 @@ export const useStyleEditorStore = create<StyleEditorState>((set, get) => ({
   fields: { ...EMPTY_FIELDS },
   baseline: { ...EMPTY_FIELDS },
 
-  isDraft: () => typeof get().selected === 'string',
+  isDraft: () => {
+    const sel = get().selected;
+    return typeof sel === 'string' && sel.startsWith('draft-');
+  },
   isDirty: () => !fieldsEqual(get().fields, get().baseline),
 
   selectStyle: (s) => {
@@ -122,15 +151,38 @@ export const useStyleEditorStore = create<StyleEditorState>((set, get) => ({
   setField: (key, value) =>
     set((s) => {
       const fields = { ...s.fields, [key]: value };
-      // 草稿态：同步把缓冲写回草稿，避免切走再回来丢失
       const drafts =
-        typeof s.selected === 'string'
+        typeof s.selected === 'string' && s.selected.startsWith('draft-')
           ? s.drafts.map((d) => (d.key === s.selected ? { ...d, fields } : d))
           : s.drafts;
       return { fields, drafts };
     }),
 
-  commitBaseline: () => set((s) => ({ baseline: { ...s.fields } })),
+  setPendingIcon: (obj) =>
+    set((s) => {
+      const fields = { ...s.fields, pendingIcon: obj, iconPreview: obj.url };
+      const drafts =
+        typeof s.selected === 'string' && s.selected.startsWith('draft-')
+          ? s.drafts.map((d) => (d.key === s.selected ? { ...d, fields } : d))
+          : s.drafts;
+      return { fields, drafts };
+    }),
+
+  clearIcon: () =>
+    set((s) => {
+      const fields = { ...s.fields, pendingIcon: null, iconPreview: '' };
+      const drafts =
+        typeof s.selected === 'string' && s.selected.startsWith('draft-')
+          ? s.drafts.map((d) => (d.key === s.selected ? { ...d, fields } : d))
+          : s.drafts;
+      return { fields, drafts };
+    }),
+
+  commitBaseline: () =>
+    set((s) => {
+      const fields = { ...s.fields, pendingIcon: null };
+      return { fields, baseline: { ...fields } };
+    }),
 
   ensureSelection: () => {
     if (get().selected === null) get().addDraft();

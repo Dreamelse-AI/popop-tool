@@ -129,6 +129,8 @@ export default defineConfig(({ mode }) => {
   const proxyAgent = upstreamProxy ? new HttpsProxyAgent(upstreamProxy) : undefined;
   // arca 海外后端域名（图库等接口），dev 走 vite proxy 规避 CORS
   const arcaOrigin = env.ARCA_ORIGIN ?? 'https://i18n-api.imaginewithu.com';
+  // 后台管理口令：dev 反代层注入 X-Admin-Token，不进前端 bundle
+  const adminApiToken = env.ADMIN_API_TOKEN ?? '';
 
   return {
     plugins: [react(), tailwindcss(), imageProxyPlugin(), styleCoverUploadPlugin(env), palettePlugin()],
@@ -186,6 +188,10 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (p) => p.replace(/^\/arca/, ''),
           configure: (proxy) => {
+            // 注入后台管理口令（X-Admin-Token），前端不持有
+            proxy.on('proxyReq', (proxyReq) => {
+              if (adminApiToken) proxyReq.setHeader('X-Admin-Token', adminApiToken);
+            });
             proxy.on('error', (err) => {
               console.error('[arca] 转发失败:', err.message);
             });

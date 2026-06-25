@@ -11,6 +11,12 @@ import { useState } from 'react';
 
 const RATIOS = ['9:16', '3:4', '2:3', '1:1', '3:2', '4:3', '16:9'];
 const RESOLUTIONS = ['1k', '2k', '4k'];
+const LANGUAGES: { value: '' | 'ja' | 'ko' | 'en'; label: string }[] = [
+  { value: '', label: '通用' },
+  { value: 'ja', label: '日语' },
+  { value: 'ko', label: '韩语' },
+  { value: 'en', label: '英语' },
+];
 
 export function StylePromptPage() {
   const lib = useStyleLibraryStore();
@@ -35,59 +41,57 @@ export function StylePromptPage() {
     editor.addDraft();
   };
 
-  // 草稿态：新增到画风库
-  const onCreate = async () => {
+  // 保存：草稿态=新建，已存态=更新；统一走 lib.save
+  const onSave = async () => {
     setHint(null);
-    if (!editor.fields.styleName.trim()) {
+    const name = editor.fields.styleName.trim();
+    if (!name) {
       setHint({ kind: 'err', text: '请先填画风名称' });
       return;
     }
-    const ok = await lib.create({
-      styleName: editor.fields.styleName.trim(),
-      styleIcon: editor.fields.styleIcon,
-      stylePrompt: editor.fields.stylePrompt,
-      priority: editor.fields.priority,
-    });
-    if (ok) {
-      const draftKey = editor.selected as string;
-      // 新建项已入库：从列表里找到它并选中（变为已存态），移除草稿
-      const created = useStyleLibraryStore
-        .getState()
-        .items.find((it) => it.styleName === editor.fields.styleName.trim());
-      editor.removeDraft(draftKey);
-      if (created) editor.selectStyle(created);
-      setHint({ kind: 'ok', text: '已新增到画风库' });
-    } else {
-      setHint({ kind: 'err', text: lib.errorMessage ?? '新增失败' });
-    }
-  };
-
-  // 已存态：保存改动
-  const onSave = async () => {
-    setHint(null);
-    if (typeof editor.selected !== 'number') return;
-    if (!editor.fields.styleName.trim()) {
-      setHint({ kind: 'err', text: '画风名称不能为空' });
+    if (name.length > 16) {
+      setHint({ kind: 'err', text: '画风名称不能超过 16 字符' });
       return;
     }
-    const ok = await lib.update({
-      id: editor.selected,
-      styleName: editor.fields.styleName.trim(),
-      styleIcon: editor.fields.styleIcon,
+    const draftKey = isDraft ? (editor.selected as string) : null;
+    const savedId = await lib.save({
+      id: isDraft ? '' : (editor.selected as string),
+      styleName: name,
       stylePrompt: editor.fields.stylePrompt,
       priority: editor.fields.priority,
+      status: editor.fields.status,
+      language: editor.fields.language,
+      styleIcon: editor.fields.pendingIcon ?? undefined,
     });
-    if (ok) {
-      editor.commitBaseline();
-      setHint({ kind: 'ok', text: '已保存' });
+    if (savedId) {
+      // 入库/更新后从最新列表里找到该项并选中（切到已存态、清 dirty）
+      const saved = useStyleLibraryStore.getState().items.find((it) => it.id === savedId);
+      if (draftKey) editor.removeDraft(draftKey);
+      if (saved) editor.selectStyle(saved);
+      else editor.commitBaseline();
+      setHint({ kind: 'ok', text: isDraft ? '已新增到画风库' : '已保存' });
     } else {
       setHint({ kind: 'err', text: lib.errorMessage ?? '保存失败' });
     }
   };
 
+  // 已存态：启用/停用
+  const onToggleStatus = async () => {
+    if (isDraft || typeof editor.selected !== 'string') return;
+    const next = editor.fields.status === 1 ? 2 : 1;
+    const ok = await lib.toggle(editor.selected, next);
+    if (ok) {
+      editor.setField('status', next);
+      editor.commitBaseline();
+      setHint({ kind: 'ok', text: next === 1 ? '已启用' : '已停用' });
+    } else {
+      setHint({ kind: 'err', text: lib.errorMessage ?? '操作失败' });
+    }
+  };
+
   // 已存态：删除
   const onDelete = async () => {
-    if (typeof editor.selected !== 'number') return;
+    if (isDraft || typeof editor.selected !== 'string') return;
     if (!window.confirm(`确定删除画风「${editor.fields.styleName}」？此操作不可撤销。`)) return;
     const ok = await lib.remove(editor.selected);
     if (ok) {
@@ -119,17 +123,16 @@ export function StylePromptPage() {
                 {isDraft ? '新建画风' : '画风参数'}
               </h2>
               <div className="flex items-center gap-3">
-                {isDraft ? (
-                  <button
-                    type="button"
-                    onClick={() => void onCreate()}
-                    disabled={lib.submitting}
-                    className="pop-btn-primary px-3 py-1.5 text-xs"
-                  >
-                    {lib.submitting ? '新增中…' : '+ 新增到画风库'}
-                  </button>
-                ) : (
+                {!isDraft && (
                   <>
+                    <button
+                      type="button"
+                      onClick={() => void onToggleStatus()}
+                      disabled={lib.submitting}
+                      className="text-xs font-semibold text-ink-3 transition hover:text-ink"
+                    >
+                      {editor.fields.status === 1 ? '停用' : '启用'}
+                    </button>
                     <button
                       type="button"
                       onClick={() => void onDelete()}
@@ -138,27 +141,32 @@ export function StylePromptPage() {
                     >
                       删除
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => void onSave()}
-                      disabled={!isDirty || lib.submitting}
-                      className={
-                        isDirty
-                          ? 'pop-btn-primary px-3 py-1.5 text-xs'
-                          : 'pop-btn-secondary px-3 py-1.5 text-xs opacity-50'
-                      }
-                    >
-                      {lib.submitting ? '保存中…' : '保存'}
-                    </button>
                   </>
                 )}
+                <button
+                  type="button"
+                  onClick={() => void onSave()}
+                  disabled={lib.submitting || (!isDraft && !isDirty)}
+                  className={
+                    isDraft || isDirty
+                      ? 'pop-btn-primary px-3 py-1.5 text-xs'
+                      : 'pop-btn-secondary px-3 py-1.5 text-xs opacity-50'
+                  }
+                >
+                  {lib.submitting
+                    ? '保存中…'
+                    : isDraft
+                      ? '+ 新增到画风库'
+                      : '保存'}
+                </button>
               </div>
             </div>
 
             {/* 封面（顶部大图） */}
             <CoverUploader
-              value={editor.fields.styleIcon}
-              onChange={(url) => editor.setField('styleIcon', url)}
+              value={editor.fields.iconPreview}
+              onUpload={(obj) => editor.setPendingIcon(obj)}
+              onClear={() => editor.clearIcon()}
             />
 
             <div>
@@ -166,20 +174,38 @@ export function StylePromptPage() {
               <input
                 value={editor.fields.styleName}
                 onChange={(e) => editor.setField('styleName', e.target.value)}
+                maxLength={16}
                 className="pop-input w-full py-1.5"
-                placeholder="如：吉卜力水彩"
+                placeholder="如：anime（≤16 字符，全局唯一）"
               />
             </div>
 
-            <div>
-              <div className="pop-label mb-1.5">优先级</div>
-              <input
-                type="number"
-                value={editor.fields.priority}
-                onChange={(e) => editor.setField('priority', Math.floor(Number(e.target.value)) || 0)}
-                className="pop-input w-28 py-1.5"
-              />
-              <span className="ml-2 text-xs text-ink-3">越大越靠前</span>
+            <div className="flex flex-wrap items-end gap-5">
+              <div>
+                <div className="pop-label mb-1.5">优先级</div>
+                <input
+                  type="number"
+                  value={editor.fields.priority}
+                  onChange={(e) => editor.setField('priority', Math.floor(Number(e.target.value)) || 0)}
+                  className="pop-input w-28 py-1.5"
+                />
+                <span className="ml-2 text-xs text-ink-3">越大越靠前</span>
+              </div>
+              <div>
+                <div className="pop-label mb-1.5">语言</div>
+                <div className="flex gap-1.5">
+                  {LANGUAGES.map((l) => (
+                    <button
+                      key={l.value || 'common'}
+                      type="button"
+                      onClick={() => editor.setField('language', l.value)}
+                      className={l.value === editor.fields.language ? 'pop-toggle-on' : 'pop-toggle'}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div>
@@ -188,8 +214,9 @@ export function StylePromptPage() {
                 value={editor.fields.stylePrompt}
                 onChange={(e) => editor.setField('stylePrompt', e.target.value)}
                 rows={4}
+                maxLength={1024}
                 className="pop-input w-full resize-y py-2 font-mono text-xs leading-relaxed"
-                placeholder="描述该画风的英文 prompt 片段"
+                placeholder="描述该画风的英文 prompt 片段（≤1024 字符）"
               />
             </div>
 
@@ -408,8 +435,8 @@ function StyleRail({ onAddDraft }: StyleRailProps) {
               }`}
             >
               <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-pop border-2 border-dashed border-cream-2 bg-soft">
-                {d.fields.styleIcon ? (
-                  <img src={d.fields.styleIcon} alt="" className="h-full w-full object-cover" />
+                {d.fields.iconPreview ? (
+                  <img src={d.fields.iconPreview} alt="" className="h-full w-full object-cover" />
                 ) : (
                   <span className="text-base text-ink-3">＋</span>
                 )}
