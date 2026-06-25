@@ -7,7 +7,12 @@ import type {
 } from '@/types/visualAsset';
 import { generateConfigs } from '@/services/visualAssetEngine';
 import { expandToPrompt } from '@/services/promptExpander';
-import { generateImageByPrompt, ImageGenError } from '@/services/imageClient';
+import {
+  appendOutputSpecToPrompt,
+  generateImageByPrompt,
+  ImageGenError,
+  resolveOutputSpec,
+} from '@/services/imageClient';
 import { saveMoodPic } from '@/services/moodpicGallery';
 import { useCustomStyleStore } from './customStyleStore';
 
@@ -53,6 +58,8 @@ interface VisualAssetState {
   retryAllFailed: () => Promise<void>;
   /** 重试单条的自动存档（出图成功但存档失败时用） */
   archiveItem: (id: string) => Promise<void>;
+  /** 图片加载完成后记录浏览器读到的真实宽高。 */
+  noteImageSize: (id: string, width: number, height: number) => void;
   cancel: () => void;
   reset: () => void;
 }
@@ -149,12 +156,18 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
       return;
     }
 
+    const outputSpec = resolveOutputSpec(ratio, resolution);
+
     // 初始化结果项（pending）
     const items: AssetResultItem[] = configs.map((config, i) => ({
       id: `${Date.now()}-${i}`,
       config,
       prompt: '',
       status: 'pending',
+      ratio,
+      resolution,
+      requestSize: outputSpec.requestSize,
+      pixelSize: outputSpec.pixelSize,
     }));
     // 累加在已有结果之前，不顶掉上一批
     set((s) => ({
@@ -180,13 +193,21 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
         try {
           update(item.id, { status: 'generating', phase: 'expanding' });
           const { prompt, via } = await expandToPrompt(item.config, styles, controller.signal);
-          update(item.id, { prompt, expandedVia: via, phase: 'imaging' });
+          const finalPrompt = appendOutputSpecToPrompt(prompt, outputSpec);
+          update(item.id, { prompt: finalPrompt, expandedVia: via, phase: 'imaging' });
           const image = await generateImageByPrompt(
             prompt,
             { size: ratio, resolution },
             controller.signal,
           );
-          update(item.id, { status: 'done', phase: undefined, url: image.url });
+          update(item.id, {
+            status: 'done',
+            phase: undefined,
+            url: image.url,
+            prompt: image.prompt,
+            requestSize: image.outputSpec.requestSize,
+            pixelSize: image.outputSpec.pixelSize,
+          });
           // 出图成功后自动存档（永久化），失败不影响出图结果展示
           void get().archiveItem(item.id);
           return;
@@ -234,7 +255,10 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
   retryItem: async (id) => {
     const target = get().items.find((it) => it.id === id);
     if (!target) return;
-    const { ratio, resolution } = get();
+    const current = get();
+    const ratio = target.ratio ?? current.ratio;
+    const resolution = target.resolution ?? current.resolution;
+    const outputSpec = resolveOutputSpec(ratio, resolution);
     const styles = useCustomStyleStore.getState().styles;
     const controller = get()._abort ?? new AbortController();
 
@@ -246,15 +270,40 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
 
     try {
       const { prompt, via } = await expandToPrompt(target.config, styles, controller.signal);
+      const finalPrompt = appendOutputSpecToPrompt(prompt, outputSpec);
       set((s) => ({
         items: s.items.map((it) =>
-          it.id === id ? { ...it, prompt, expandedVia: via, phase: 'imaging' } : it,
+          it.id === id
+            ? {
+                ...it,
+                prompt: finalPrompt,
+                expandedVia: via,
+                phase: 'imaging',
+                ratio,
+                resolution,
+                requestSize: outputSpec.requestSize,
+                pixelSize: outputSpec.pixelSize,
+              }
+            : it,
         ),
       }));
       const image = await generateImageByPrompt(prompt, { size: ratio, resolution }, controller.signal);
       set((s) => ({
         items: s.items.map((it) =>
-          it.id === id ? { ...it, status: 'done', phase: undefined, prompt, expandedVia: via, url: image.url } : it,
+          it.id === id
+            ? {
+                ...it,
+                status: 'done',
+                phase: undefined,
+                prompt: image.prompt,
+                expandedVia: via,
+                url: image.url,
+                ratio,
+                resolution,
+                requestSize: image.outputSpec.requestSize,
+                pixelSize: image.outputSpec.pixelSize,
+              }
+            : it,
         ),
       }));
       void get().archiveItem(id);
@@ -277,7 +326,8 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
   archiveItem: async (id) => {
     const item = get().items.find((it) => it.id === id);
     if (!item || item.status !== 'done' || !item.url || item.savedAssetId) return;
-    const { ratio, resolution } = get();
+    const ratio = item.ratio ?? get().ratio;
+    const resolution = item.resolution ?? get().resolution;
 
     set((s) => ({
       items: s.items.map((it) =>
@@ -309,6 +359,10 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
       }));
     }
   },
+  noteImageSize: (id, width, height) =>
+    set((s) => ({
+      items: s.items.map((it) => (it.id === id ? { ...it, actualWidth: width, actualHeight: height } : it)),
+    })),
   // [CANCEL]
   cancel: () => {
     get()._abort?.abort();
