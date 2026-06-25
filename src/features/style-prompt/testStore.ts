@@ -1,9 +1,8 @@
 /**
- * 画风生图测试 store。
+ * 画风生图测试 store（仅负责出图，不再持有画风字段）。
  *
- * 用「画风 prompt + 人物/其他提示词」拼接成最终 prompt，单张或多张并发出图。
- * 出图结果可「通过 → 存为新画风」（调 create，把当前 prompt 作为 style_prompt）。
- *
+ * 画风字段（名称/封面/prompt/优先级）由 editorStore 管理；
+ * 出图时把「画风 prompt + 人物/其他提示词」拼接成最终 prompt，单/多张并发出图。
  * 出图复用 services/imageClient（apimart gpt-image-2），并发 worker 池同视觉资产引擎。
  */
 
@@ -26,14 +25,6 @@ export interface TestResultItem {
 }
 
 interface StyleTestState {
-  /** 画风名称（可直接编辑，新增到画风库时用）。 */
-  styleName: string;
-  /** 画风封面图 URL（上传 OSS 后回填）。 */
-  styleIcon: string;
-  /** 画风 prompt（从画风库选中带入，或手动编辑）。 */
-  stylePromptText: string;
-  /** 优先级。 */
-  priority: number;
   /** 人物 / 其他附加提示词（仅测试用，不入库）。 */
   extraPrompt: string;
   count: number;
@@ -46,22 +37,12 @@ interface StyleTestState {
 
   _abort: AbortController | null;
 
-  setStyleName: (v: string) => void;
-  setStyleIcon: (v: string) => void;
-  setStylePromptText: (v: string) => void;
-  setPriority: (n: number) => void;
   setExtraPrompt: (v: string) => void;
   setCount: (n: number) => void;
   setRatio: (r: string) => void;
   setResolution: (r: string) => void;
-  /** 从画风库选一条带入测试（带入全部画风字段，便于改完直接新增为新画风）。 */
-  loadFromStyle: (input: {
-    styleName: string;
-    styleIcon: string;
-    stylePrompt: string;
-    priority: number;
-  }) => void;
-  generate: () => Promise<void>;
+  /** 用给定画风 prompt 出图（画风 prompt 由调用方从 editorStore 传入）。 */
+  generate: (stylePrompt: string) => Promise<void>;
   retryItem: (id: string) => Promise<void>;
   cancel: () => void;
   reset: () => void;
@@ -73,10 +54,6 @@ export function buildTestPrompt(stylePrompt: string, extra: string): string {
 }
 
 export const useStyleTestStore = create<StyleTestState>((set, get) => ({
-  styleName: '',
-  styleIcon: '',
-  stylePromptText: '',
-  priority: 0,
   extraPrompt: '',
   count: 1,
   ratio: '1:1',
@@ -86,28 +63,17 @@ export const useStyleTestStore = create<StyleTestState>((set, get) => ({
   items: [],
   _abort: null,
 
-  setStyleName: (v) => set({ styleName: v }),
-  setStyleIcon: (v) => set({ styleIcon: v }),
-  setStylePromptText: (v) => set({ stylePromptText: v }),
-  setPriority: (n) => set({ priority: Math.floor(n) || 0 }),
   setExtraPrompt: (v) => set({ extraPrompt: v }),
   setCount: (n) => set({ count: Math.max(1, Math.min(20, Math.floor(n) || 1)) }),
   setRatio: (ratio) => set({ ratio }),
   setResolution: (resolution) => set({ resolution }),
-  loadFromStyle: (input) =>
-    set({
-      styleName: input.styleName,
-      styleIcon: input.styleIcon,
-      stylePromptText: input.stylePrompt,
-      priority: input.priority,
-    }),
 
-  generate: async () => {
+  generate: async (stylePrompt) => {
     get()._abort?.abort();
     const controller = new AbortController();
-    const { stylePromptText, extraPrompt, count, ratio, resolution } = get();
+    const { extraPrompt, count, ratio, resolution } = get();
 
-    const prompt = buildTestPrompt(stylePromptText, extraPrompt);
+    const prompt = buildTestPrompt(stylePrompt, extraPrompt);
     if (!prompt) {
       set({ status: 'error', errorMessage: '请先填写画风 prompt 或提示词' });
       return;
@@ -197,10 +163,6 @@ export const useStyleTestStore = create<StyleTestState>((set, get) => ({
   reset: () => {
     get()._abort?.abort();
     set({
-      styleName: '',
-      styleIcon: '',
-      stylePromptText: '',
-      priority: 0,
       extraPrompt: '',
       items: [],
       status: 'idle',
