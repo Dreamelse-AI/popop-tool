@@ -86,8 +86,8 @@ export async function saveStylePrompt(
     status: input.status,
     language: input.language,
   };
-  // 仅本次换图时带 style_icon（StorageObject）；不传 = 保持原图标
-  if (input.styleIcon) body.style_icon = input.styleIcon;
+  // 仅本次换图时带 style_icon（后端只依赖 url，故只发 url 字段）；不传 = 保持原图标
+  if (input.styleIcon) body.style_icon = { url: input.styleIcon.url };
 
   const data = await arcaAdmin<{ ok: boolean; id: string }>(`${BASE}/save`, {
     method: 'POST',
