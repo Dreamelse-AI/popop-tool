@@ -131,9 +131,16 @@ export const useStickerStore = create<StickerState>((set, get) => ({
       if (get()._abort !== controller) return;
       set({ gridUrl: image.url, status: 'slicing' });
 
-      // 2. 前端切成 9 张
-      const cells = await sliceGrid(image.url, controller.signal);
-      if (get()._abort !== controller) return;
+      // 2. 前端切成 9 张（同时拿到大图本地 blob URL，供 Lightbox 秒开）
+      const { cells, gridObjectUrl } = await sliceGrid(image.url, controller.signal);
+      if (get()._abort !== controller) {
+        URL.revokeObjectURL(gridObjectUrl);
+        return;
+      }
+      // 用本地 blob URL 替换远程直链，避免看大图时再次远程下载 2K 图
+      const prevGrid = get().gridUrl;
+      if (prevGrid && prevGrid.startsWith('blob:')) URL.revokeObjectURL(prevGrid);
+      set({ gridUrl: gridObjectUrl });
 
       // 3. 可选抠图（逐张，纯前端）
       const needMatting = matting === 'colorKey';
@@ -182,6 +189,8 @@ export const useStickerStore = create<StickerState>((set, get) => ({
 
   reset: () => {
     get()._abort?.abort();
+    const prevGrid = get().gridUrl;
+    if (prevGrid && prevGrid.startsWith('blob:')) URL.revokeObjectURL(prevGrid);
     set({
       status: 'idle',
       errorMessage: null,
