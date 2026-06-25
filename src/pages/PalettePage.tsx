@@ -37,7 +37,8 @@ export function PalettePage() {
   }, [load]);
 
   const handleDelete = (entry: PaletteEntry) => {
-    const ok = window.confirm(`确认删除「${entry.name || entry.id}」？此操作会从服务器永久删除，不可恢复。`);
+    const label = entry.schemes[0]?.name || entry.id;
+    const ok = window.confirm(`确认删除「${label}」？此操作会从配色库移除，不可恢复。`);
     if (ok) void remove(entry.id);
   };
 
@@ -134,17 +135,16 @@ interface PaletteTableProps {
   onDelete: (entry: PaletteEntry) => void;
 }
 
-/** 配色记录表格：原始图 / 主色板 / id / name / 两套方案（底+字+情绪）/ 操作。 */
+/** 配色记录表格：原始图 / 主色板 / id / 两套方案（名字+底+字+情绪）/ 操作。 */
 function PaletteTable({ items, deletingId, onPreview, onDelete }: PaletteTableProps) {
   return (
     <div className="overflow-x-auto rounded-pop-lg border-2 border-ink bg-paper shadow-sticker">
-      <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+      <table className="w-full min-w-[820px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b-2 border-ink bg-cream-soft font-mono text-[11px] uppercase text-ink-2">
             <Th>原始图</Th>
             <Th>主色板</Th>
             <Th>id</Th>
-            <Th>name</Th>
             <Th>方案 A</Th>
             <Th>方案 B</Th>
             <Th>操作</Th>
@@ -160,7 +160,7 @@ function PaletteTable({ items, deletingId, onPreview, onDelete }: PaletteTablePr
                   className="block h-14 w-14 overflow-hidden rounded-pop border-2 border-ink bg-soft"
                   aria-label="查看大图"
                 >
-                  <img src={entry.imageUrl} alt={entry.name} className="h-full w-full object-cover" />
+                  <img src={entry.imageUrl} alt={entry.schemes[0]?.name ?? ''} className="h-full w-full object-cover" />
                 </button>
               </Td>
               <Td>
@@ -178,12 +178,9 @@ function PaletteTable({ items, deletingId, onPreview, onDelete }: PaletteTablePr
               <Td>
                 <code className="font-mono text-xs text-ink-2">{entry.id}</code>
               </Td>
-              <Td>
-                <span className="font-semibold text-ink">{entry.name}</span>
-              </Td>
               {[0, 1].map((i) => (
                 <Td key={i}>
-                  <SchemeCell scheme={entry.schemes[i]} name={entry.name} />
+                  <SchemeCell scheme={entry.schemes[i]} />
                 </Td>
               ))}
               <Td>
@@ -204,8 +201,8 @@ function PaletteTable({ items, deletingId, onPreview, onDelete }: PaletteTablePr
   );
 }
 
-/** 方案单元格：底/字色预览块 + 两个色值 + 情绪词。 */
-function SchemeCell({ scheme, name }: { scheme?: import('@/types/palette').PaletteScheme; name: string }) {
+/** 方案单元格：名字 + 底/字色预览块 + 两个色值 + 情绪词。 */
+function SchemeCell({ scheme }: { scheme?: import('@/types/palette').PaletteScheme }) {
   if (!scheme) return <span className="text-ink-3">—</span>;
   return (
     <div className="min-w-[9rem]">
@@ -213,7 +210,7 @@ function SchemeCell({ scheme, name }: { scheme?: import('@/types/palette').Palet
         className="mb-1 flex h-9 items-center justify-center rounded border-2 border-ink text-center"
         style={{ background: scheme.bgColor, color: scheme.fontColor }}
       >
-        <span className="font-display text-xs font-extrabold">{name || '预览'}</span>
+        <span className="font-display text-xs font-extrabold">{scheme.name || '预览'}</span>
       </div>
       <div className="flex items-center gap-1">
         <SwatchValue value={scheme.bgColor} />

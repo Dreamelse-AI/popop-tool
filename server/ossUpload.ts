@@ -28,6 +28,8 @@ const MAX_BYTES = 8 * 1024 * 1024;
 export interface UploadCoverInput {
   /** base64 data URI（data:image/png;base64,xxxx）或纯 base64。 */
   dataUrl: string;
+  /** 对象 key 的子目录（默认 style-cover/）。如配色库传 'palette/'。 */
+  subdir?: string;
 }
 
 export interface UploadCoverResult {
@@ -90,7 +92,8 @@ export async function uploadCoverToOss(input: UploadCoverInput): Promise<UploadC
   const { region, bucket, accessKeyId, accessKeySecret, prefix } = readOssConfig();
   const { buffer, mime } = parseDataUrl(input.dataUrl);
   const ext = MIME_EXT[mime];
-  const objectKey = `${prefix}style-cover/${crypto.randomUUID()}.${ext}`;
+  const subdir = input.subdir ?? 'style-cover/';
+  const objectKey = `${prefix}${subdir}${crypto.randomUUID()}.${ext}`;
 
   const client = new OSS({ region, accessKeyId, accessKeySecret, bucket, secure: true });
   const result = await client.put(objectKey, buffer, {

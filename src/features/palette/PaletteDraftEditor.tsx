@@ -11,7 +11,7 @@ interface PaletteDraftEditorProps {
   saving: boolean;
   errorMessage: string | null;
   index?: number;
-  onChangeMeta: (patch: Partial<Pick<PaletteDraft, 'id' | 'name'>>) => void;
+  onChangeMeta: (patch: Partial<Pick<PaletteDraft, 'id'>>) => void;
   onChangeScheme: (schemeIndex: number, patch: Partial<PaletteScheme>) => void;
   onSwapScheme: (schemeIndex: number) => void;
   onSave: () => void;
@@ -27,7 +27,6 @@ function isHex(v: string): boolean {
 function clampName(v: string): string {
   return Array.from(v).slice(0, 4).join('');
 }
-
 /** 当前激活的取色目标：第几套方案的底色/字色。 */
 interface ActiveTarget {
   schemeIndex: number;
@@ -150,18 +149,6 @@ export function PaletteDraftEditor({
                 <span className="mt-1 block text-[11px] text-err">仅小写英文、数字、连字符</span>
               )}
             </label>
-            <label className="block">
-              <span className="mb-1 block font-mono text-[11px] font-semibold text-ink-2">
-                name（名字 ≤4 字）
-              </span>
-              <input
-                value={draft.name}
-                onChange={(e) => onChangeMeta({ name: clampName(e.target.value) })}
-                maxLength={8}
-                className="pop-input w-full text-sm"
-                placeholder="暮色微醺"
-              />
-            </label>
           </div>
         </div>
 
@@ -172,7 +159,6 @@ export function PaletteDraftEditor({
               key={i}
               schemeIndex={i}
               scheme={scheme}
-              name={draft.name}
               active={active}
               onSelectField={(field) => setActive({ schemeIndex: i, field })}
               onChange={(patch) => onChangeScheme(i, patch)}
@@ -202,7 +188,6 @@ export function PaletteDraftEditor({
 interface SchemeCardProps {
   schemeIndex: number;
   scheme: PaletteScheme;
-  name: string;
   active: ActiveTarget;
   onSelectField: (field: 'bgColor' | 'fontColor') => void;
   onChange: (patch: Partial<PaletteScheme>) => void;
@@ -210,11 +195,10 @@ interface SchemeCardProps {
   onEyeDropper: (field: 'bgColor' | 'fontColor') => void;
 }
 
-/** 单套方案卡片：预览 + 底色/字色（可选中、吸管）+ 情绪词 + 互换。 */
+/** 单套方案卡片：名字 + 预览 + 底色/字色（可选中、吸管）+ 情绪词 + 互换。 */
 function SchemeCard({
   schemeIndex,
   scheme,
-  name,
   active,
   onSelectField,
   onChange,
@@ -235,8 +219,19 @@ function SchemeCard({
         className="mb-2 flex h-16 items-center justify-center rounded-pop border-2 border-ink text-center"
         style={{ background: scheme.bgColor, color: scheme.fontColor }}
       >
-        <span className="font-display text-base font-extrabold">{name || '配色预览'}</span>
+        <span className="font-display text-base font-extrabold">{scheme.name || '配色预览'}</span>
       </div>
+
+      <label className="mb-1.5 block">
+        <span className="mb-1 block font-mono text-[11px] font-semibold text-ink-2">name（名字 ≤4 字）</span>
+        <input
+          value={scheme.name}
+          onChange={(e) => onChange({ name: clampName(e.target.value) })}
+          maxLength={8}
+          className="pop-input w-full text-sm"
+          placeholder="暮色微醺"
+        />
+      </label>
 
       <ColorRow
         label="bgColor"
