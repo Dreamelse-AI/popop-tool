@@ -5,7 +5,9 @@
  *   1. 把图片画到一个缩小的离屏 canvas（采样足够、又不卡）。
  *   2. 量化：每个像素 RGB 各取高位（缩 bucket），按出现频次聚合。
  *   3. 取频次最高的若干 bucket 作为主色，去掉过近的颜色避免重复。
- *   4. 推导建议：背景色用占比最大的主色，字体色按背景明度取黑/白保证对比。
+ *   4. 推导建议：背景色用占比最大的主色；字体色从**其余主色**里挑与背景
+ *      对比度最高的一个（WCAG 对比度），让配色卡的字色也来自图片本身。
+ *      仅当所有主色与背景对比都过低（读不清）时，才兜底黑/白保证可读性。
  *
  * 全程本地，离线可跑；图片像素来自用户上传（同源/本地 dataURL，无 CORS 问题）。
  */
@@ -41,9 +43,23 @@ function rgbToHex(r: number, g: number, b: number): string {
   return `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
 }
 
-/** 相对亮度（sRGB 感知亮度近似），用于挑字体色。 */
-function luminance(r: number, g: number, b: number): number {
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+/** sRGB 通道线性化（WCAG 相对亮度用）。 */
+function linearize(channel: number): number {
+  const c = channel / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+/** WCAG 相对亮度（0=黑，1=白）。 */
+function relLuminance(r: number, g: number, b: number): number {
+  return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
+}
+
+/** WCAG 对比度（1~21），值越大越易读。 */
+function contrastRatio(a: Bucket, b: Bucket): number {
+  const la = relLuminance(a.r, a.g, a.b);
+  const lb = relLuminance(b.r, b.g, b.b);
+  const [hi, lo] = la >= lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
 }
 
 /** 两色欧氏距离平方（RGB），用于去重相近色。 */
@@ -86,12 +102,40 @@ export async function extractPalette(
     const colors = top.map((b) => rgbToHex(b.r, b.g, b.b));
     const bg = top[0];
     const bgColor = colors[0] ?? '#ffffff';
-    const fontColor = bg && luminance(bg.r, bg.g, bg.b) > 0.55 ? '#0b0b0b' : '#ffffff';
+    const fontColor = bg ? pickFontColor(bg, top) : '#0b0b0b';
 
     return { colors, bgColor, fontColor };
   } finally {
     bitmap.close();
   }
+}
+
+/** 文字可读的最低对比度（WCAG AA 正文为 4.5；配色卡标题略放宽到 3.5）。 */
+const MIN_READABLE_CONTRAST = 3.5;
+const BLACK: Bucket = { count: 0, r: 11, g: 11, b: 11 };
+const WHITE: Bucket = { count: 0, r: 255, g: 255, b: 255 };
+
+/**
+ * 从主色板里挑字体色：取与背景对比度最高的那个主色（排除背景本身）。
+ * 若最佳主色对比仍读不清，则在黑/白里取对比更高者兜底，保证文字可读。
+ */
+function pickFontColor(bg: Bucket, palette: Bucket[]): string {
+  let best: Bucket | null = null;
+  let bestContrast = 0;
+  // 跳过第一个（背景自身），其余主色里找对比最高的
+  for (let i = 1; i < palette.length; i++) {
+    const c = contrastRatio(bg, palette[i]);
+    if (c > bestContrast) {
+      bestContrast = c;
+      best = palette[i];
+    }
+  }
+  if (best && bestContrast >= MIN_READABLE_CONTRAST) {
+    return rgbToHex(best.r, best.g, best.b);
+  }
+  // 主色都读不清：黑/白兜底，取对比更高者
+  const fallback = contrastRatio(bg, BLACK) >= contrastRatio(bg, WHITE) ? BLACK : WHITE;
+  return rgbToHex(fallback.r, fallback.g, fallback.b);
 }
 
 /** 量化像素到 bucket，聚合频次与平均色。 */
