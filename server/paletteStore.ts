@@ -30,8 +30,6 @@ export interface PaletteRecord {
   imageUrl: string;
   /** 原图落盘文件名 <id>.<ext> */
   imageFile: string;
-  /** 适用情绪氛围场景描述 */
-  scene: string;
   /** 创建时间 ISO 字符串 */
   createdAt: string;
 }
@@ -57,7 +55,17 @@ function enqueue<T>(task: () => Promise<T>): Promise<T> {
 }
 
 async function ensureDirs(): Promise<void> {
-  await fs.mkdir(IMAGES_DIR, { recursive: true });
+  try {
+    await fs.mkdir(IMAGES_DIR, { recursive: true });
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException;
+    if (err.code === 'EACCES' || err.code === 'EROFS' || err.code === 'EPERM') {
+      throw new PaletteError(
+        `数据目录不可写（${DATA_DIR}）：请确认容器已挂可写持久卷，或设置 PALETTE_DATA_DIR 指向可写目录`,
+      );
+    }
+    throw e;
+  }
 }
 
 /** 读取全部记录（按创建时间倒序）。文件不存在视为空库。 */
@@ -111,7 +119,6 @@ export interface SaveInput {
   mood: string;
   bgColor: string;
   fontColor: string;
-  scene: string;
   colors: string[];
   /** 原图 base64 data URL */
   imageDataUrl: string;
@@ -149,7 +156,6 @@ export async function createRecord(input: SaveInput): Promise<PaletteRecord> {
       bgColor: input.bgColor,
       fontColor: input.fontColor,
       colors: input.colors,
-      scene: input.scene,
       imageFile,
       imageUrl: `/api/palette/image/${imageFile}`,
       createdAt: new Date().toISOString(),

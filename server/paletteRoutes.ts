@@ -139,7 +139,6 @@ async function handleSave(req: IncomingMessage, res: ServerResponse): Promise<vo
     mood: body.mood ?? '',
     bgColor: body.bgColor ?? '',
     fontColor: body.fontColor ?? '',
-    scene: body.scene ?? '',
     colors: Array.isArray(body.colors) ? body.colors : [],
     imageDataUrl: body.imageDataUrl,
   });

@@ -1,8 +1,8 @@
 /**
- * 配色命名 + 情绪氛围场景生成（apimart 文本模型）。
+ * 配色命名 + 情绪词生成（apimart 文本模型）。
  *
  * 输入：canvas 提取出的主色 hex 数组。
- * 输出：英文连字符 id、中文名字、情绪词、适用场景描述。
+ * 输出：英文连字符 id、中文名字（≤4 字）、情绪词。
  *
  * 安全：apimart key 不出现在前端，统一走同源 /apimart 代理注入（与 promptExpander 一致）。
  * 失败兜底：模型不可用时退回本地规则命名，保证离线/异常下流程不断。
@@ -18,11 +18,10 @@ export interface NamingResult {
   id: string;
   name: string;
   mood: string;
-  scene: string;
 }
 
 /**
- * 给一组主色起名、定情绪、写适用场景。
+ * 给一组主色起名、定情绪词。
  * @param colors 主色 hex 数组（占比从高到低）
  * @param signal 可选取消信号
  */
@@ -44,12 +43,11 @@ async function nameViaApimart(
   signal?: AbortSignal,
 ): Promise<NamingResult> {
   const userContent = [
-    '你是一名资深品牌视觉与色彩设计师。根据给定的主色板，输出一个配色方案的命名与情绪场景。',
+    '你是一名资深品牌视觉与色彩设计师。根据给定的主色板，输出一个配色方案的命名与情绪词。',
     '严格只返回一个 JSON 对象，不要任何解释、不要 markdown 代码块包裹。JSON 字段：',
     '- "id": 英文小写连字符 slug（2-4 个单词，如 "warm-dusk-glow"），只含 a-z 0-9 和连字符。',
-    '- "name": 中文名字，4-8 字，富有画面感（如「暮色微醺」）。',
+    '- "name": 中文名字，最多 4 个字，富有画面感（如「暮色微醺」「青苔」）。绝不超过 4 字。',
     '- "mood": 情绪词，2-4 个中文词用「、」分隔（如「温暖、慵懒、治愈」）。',
-    '- "scene": 一句话中文，描述这套配色适合的情绪氛围与使用场景（20-40 字）。',
     '',
     `主色板（hex，按占比从高到低）：${colors.join(', ')}`,
   ].join('\n');
@@ -142,16 +140,24 @@ function slugify(raw: string): string {
   return s.slice(0, 48);
 }
 
-/** 把 AI 输出规整成 NamingResult，缺字段用兜底补齐。 */
+/** 把 AI 输出规整成 NamingResult，缺字段用兜底补齐；name 强制截到 4 字。 */
 function normalize(obj: Record<string, unknown>, colors: string[]): NamingResult {
   const fallback = nameMock(colors);
   const id = typeof obj.id === 'string' && obj.id.trim() ? slugify(obj.id) : fallback.id;
+  const rawName =
+    typeof obj.name === 'string' && obj.name.trim() ? obj.name.trim() : fallback.name;
   return {
     id: id || fallback.id,
-    name: typeof obj.name === 'string' && obj.name.trim() ? obj.name.trim() : fallback.name,
+    name: clampName(rawName),
     mood: typeof obj.mood === 'string' && obj.mood.trim() ? obj.mood.trim() : fallback.mood,
-    scene: typeof obj.scene === 'string' && obj.scene.trim() ? obj.scene.trim() : fallback.scene,
   };
+}
+
+/** 名字最多 4 个字：用 Intl 分段按「字」截断，兼容中英混排，去掉尾随标点。 */
+function clampName(name: string): string {
+  const chars = Array.from(name.replace(/\s+/g, ''));
+  const clamped = chars.slice(0, 4).join('');
+  return clamped.replace(/[。、，,.!！]+$/, '') || name.slice(0, 4);
 }
 
 /** 安全读取错误响应里的 message。 */
@@ -169,8 +175,7 @@ function nameMock(_colors: string[]): NamingResult {
   const suffix = Math.random().toString(36).slice(2, 6);
   return {
     id: `palette-${suffix}`,
-    name: '未命名配色',
+    name: '未命名',
     mood: '中性',
-    scene: '请补充该配色适合的情绪氛围与使用场景。',
   };
 }
