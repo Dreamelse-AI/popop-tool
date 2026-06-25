@@ -4,6 +4,8 @@ interface PaletteDraftEditorProps {
   draft: PaletteDraft;
   saving: boolean;
   errorMessage: string | null;
+  /** 是否在多张并存时显示序号角标 */
+  index?: number;
   onChange: (patch: Partial<PaletteDraft>) => void;
   onSave: () => void;
   onDiscard: () => void;
@@ -14,14 +16,20 @@ function isHex(v: string): boolean {
   return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v.trim());
 }
 
+/** 名字最多 4 个字（按「字」截，兼容中英）。 */
+function clampName(v: string): string {
+  return Array.from(v).slice(0, 4).join('');
+}
+
 /**
  * 待确认草稿编辑器：展示原图 + 提取的主色，字段可改，确认后保存为永久记录。
- * 字段与表单契约一致：id / name / mood / bgColor / fontColor（外加 colors / scene）。
+ * 字段：id / name（≤4 字）/ mood / bgColor / fontColor（外加 colors）。
  */
 export function PaletteDraftEditor({
   draft,
   saving,
   errorMessage,
+  index,
   onChange,
   onSave,
   onDiscard,
@@ -32,7 +40,12 @@ export function PaletteDraftEditor({
   return (
     <div className="pop-card">
       <div className="mb-3 flex items-center justify-between">
-        <span className="pop-label">确认配色信息</span>
+        <span className="pop-label">
+          确认配色信息
+          {typeof index === 'number' && (
+            <span className="ml-2 font-mono text-[11px] font-normal text-ink-3">#{index + 1}</span>
+          )}
+        </span>
         <button type="button" onClick={onDiscard} className="pop-link" disabled={saving}>
           丢弃
         </button>
@@ -78,10 +91,11 @@ export function PaletteDraftEditor({
               )}
             </Field>
 
-            <Field label="name（名字）" full>
+            <Field label="name（名字 ≤4 字）" full>
               <input
                 value={draft.name}
-                onChange={(e) => onChange({ name: e.target.value })}
+                onChange={(e) => onChange({ name: clampName(e.target.value) })}
+                maxLength={8}
                 className="pop-input text-sm"
                 placeholder="暮色微醺"
               />
@@ -118,16 +132,6 @@ export function PaletteDraftEditor({
                   placeholder="#0B0B0B"
                 />
               </div>
-            </Field>
-
-            <Field label="情绪氛围场景" full>
-              <textarea
-                value={draft.scene}
-                onChange={(e) => onChange({ scene: e.target.value })}
-                rows={2}
-                className="pop-textarea text-sm"
-                placeholder="适合温暖治愈的生活方式内容…"
-              />
             </Field>
           </div>
         </div>
