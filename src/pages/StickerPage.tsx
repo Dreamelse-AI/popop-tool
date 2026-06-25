@@ -5,7 +5,7 @@ import { PromptManager } from '@/features/sticker/PromptManager';
 import { PromptSkeletonFields } from '@/features/sticker/PromptSkeletonFields';
 import { EmotionManager } from '@/features/sticker/EmotionManager';
 import { ReferenceUploader } from '@/features/sticker/ReferenceUploader';
-import { downloadImage } from '@/features/background/downloadImage';
+import { downloadImage } from '@/utils/downloadImage';
 import { ToolHeader } from '@/components/ToolHeader';
 import { Lightbox } from '@/components/Lightbox';
 import { ResultPanel } from '@/components/ResultPanel';

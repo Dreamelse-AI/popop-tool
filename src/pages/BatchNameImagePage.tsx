@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNameImageStore, parseElements } from '@/features/batch-name-image/store';
-import { downloadImage } from '@/features/background/downloadImage';
+import { downloadImage } from '@/utils/downloadImage';
 import { ToolHeader } from '@/components/ToolHeader';
 import { Lightbox } from '@/components/Lightbox';
 import { ResultPanel } from '@/components/ResultPanel';
@@ -63,8 +63,8 @@ export function BatchNameImagePage() {
   return (
     <div className="min-h-full">
       <ToolHeader
-        title="批量名字生图"
-        subtitle="基础元素（空行分隔多个内容）× 题材类型 × 风格 → 整理扩写后批量生成对应图片"
+        title="批量生成工具"
+        subtitle="基础元素（每行一个内容）× 题材类型 × 风格 → 整理扩写后批量生成对应图片"
       />
       <main className="mx-auto grid max-w-6xl grid-cols-1 gap-8 p-6 sm:p-8 lg:grid-cols-2">
         {/* [LEFT] */}
@@ -74,11 +74,11 @@ export function BatchNameImagePage() {
             <textarea
               value={elementsText}
               onChange={(e) => setElementsText(e.target.value)}
-              placeholder={'每段一个内容，用空行分隔多个，例如：\n\n张三\n\n李四\n\n王五'}
+              placeholder={'每行一个内容，例如：\n张三\n李四\n王五'}
               className="pop-textarea h-44 w-full font-mono text-sm leading-relaxed"
             />
             <p className="mt-1 text-[11px] text-ink-3">
-              空行分隔识别为多个内容，已识别 <span className="font-semibold text-ink-2">{elementCount}</span> 个
+              每行识别为一个内容，已识别 <span className="font-semibold text-ink-2">{elementCount}</span> 个
             </p>
           </div>
         {/* [LEFT_SUBJECT] */}

@@ -12,12 +12,24 @@
  * 文档：https://docs.apimart.ai/cn/api-reference/images/gpt-image-2/generation
  */
 
-import type {
-  BackgroundRecipe,
-  GenerateImageRequest,
-  GeneratedImage,
-} from '@/types/background';
-import { buildPrompt } from './promptBuilder';
+/** 图像生成请求体（发给同源代理 /apimart，代理再转发给 apimart）。 */
+interface GenerateImageRequest {
+  /** 固定 gpt-image-2 */
+  model: string;
+  prompt: string;
+  /** 生成张数，固定 1 */
+  n: number;
+  /** 比例（如 9:16）或精确像素（如 1152x2048） */
+  size: string;
+  /** 分辨率档位 1k/2k/4k；传精确像素时省略 */
+  resolution?: string;
+}
+
+/** 图像生成结果。apimart 任务完成后从 result.images[0].url[0] 取直链。 */
+export interface GeneratedImage {
+  /** 直链 URL */
+  url: string;
+}
 
 /** 同源代理基址：dev 走 vite proxy 的 /apimart，生产同源 /apimart。 */
 const APIMART_BASE = '/apimart';
@@ -154,19 +166,6 @@ async function createTaskByPrompt(
   return taskId;
 }
 
-/** 提交生成任务，返回 task_id（背景生成器用：先按五层拼 prompt）。 */
-async function createTask(
-  recipe: BackgroundRecipe,
-  signal?: AbortSignal,
-): Promise<string> {
-  const prompt = buildPrompt(recipe.selection, recipe.extraKeywords);
-  return createTaskByPrompt(
-    prompt,
-    { size: recipe.ratio, resolution: recipe.resolution },
-    signal,
-  );
-}
-
 /** 轮询任务直到完成，返回图片直链。 */
 async function pollTask(taskId: string, signal?: AbortSignal): Promise<string> {
   const start = Date.now();
@@ -253,20 +252,6 @@ async function safeErrorMessage(res: Response): Promise<string> {
 }
 
 /**
- * 根据配方生成一张氛围背景图（提交 + 轮询，可能耗时数十秒到数分钟）。
- * @param recipe 五层选择 + 输出规格
- * @param signal 可选取消信号
- */
-export async function generateBackground(
-  recipe: BackgroundRecipe,
-  signal?: AbortSignal,
-): Promise<GeneratedImage> {
-  const taskId = await createTask(recipe, signal);
-  const url = await pollTask(taskId, signal);
-  return { url };
-}
-
-/**
  * 按给定 prompt 生成一张图（通用底层，供视觉资产引擎等复用）。
  * @param prompt 完整 image prompt（已展开）
  * @param opts 输出规格（size 比例 / resolution 档位）
@@ -298,9 +283,4 @@ export async function generateImageByReference(
   const taskId = await createTaskByPrompt(prompt, opts, signal, imageUrls);
   const url = await pollTask(taskId, signal);
   return { url };
-}
-
-/** 把生成结果转成可用于 <img src> 和下载的 URL。 */
-export function resolveImageSrc(image: GeneratedImage): string {
-  return image.url;
 }

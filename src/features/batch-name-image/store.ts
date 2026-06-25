@@ -1,7 +1,7 @@
 /**
- * 批量名字生成图片 store。
+ * 批量生成工具 store。
  *
- * 把「基础元素（空行分隔的多个内容）× 题材类型 × 风格提示词」组合成每个内容一条
+ * 把「基础元素（每行一个内容）× 题材类型 × 风格提示词」组合成每个内容一条
  * 出图任务，可选交给模型整理扩写后批量并发出图。展示整体进度，支持单条重试、
  * 单张/批量下载、单条/批量删除。
  *
@@ -46,7 +46,7 @@ export interface NameImageItem {
 }
 
 interface NameImageState {
-  /** 基础元素输入框原文（空行分隔多个内容）。 */
+  /** 基础元素输入框原文（每行一个内容）。 */
   elementsText: string;
   /** 题材类型（如人物形象、音乐封面）。 */
   subject: string;
@@ -83,12 +83,12 @@ interface NameImageState {
   reset: () => void;
 }
 
-/** 把输入框文本按空行拆成多个基础元素（去空、去重保序）。 */
+/** 把输入框文本按换行拆成多个基础元素（每行一个，去空、去重保序）。 */
 export function parseElements(text: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const block of text.split(/\n\s*\n/)) {
-    const v = block.trim();
+  for (const line of text.split(/\r?\n/)) {
+    const v = line.trim();
     if (!v || seen.has(v)) continue;
     seen.add(v);
     out.push(v);
@@ -154,7 +154,7 @@ export const useNameImageStore = create<NameImageState>((set, get) => ({
 
     const elements = parseElements(elementsText);
     if (elements.length === 0) {
-      set({ status: 'error', errorMessage: '请先在左侧填写至少一个基础元素（用空行分隔多个）' });
+      set({ status: 'error', errorMessage: '请先在左侧填写至少一个基础元素（每行一个）' });
       return;
     }
     if (elements.length > MAX_ITEMS) {
