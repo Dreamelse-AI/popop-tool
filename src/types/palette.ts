@@ -4,18 +4,24 @@
  * 对应服务端 server/paletteStore.ts 的 PaletteRecord（camelCase 一致，路由层不做转换）。
  */
 
-/** 一条已永久存储的配色记录。 */
+/** 一套配色方案：底色 + 字色 + 该方案的情绪词（两套方案平等，可各有情绪词）。 */
+export interface PaletteScheme {
+  /** 背景：#色值 或 CSS 渐变字符串 */
+  bgColor: string;
+  /** 字体色：#色值 */
+  fontColor: string;
+  /** 该方案的情绪词 */
+  mood: string;
+}
+
+/** 一条已永久存储的配色记录（含两套平等方案，供不同场景调用）。 */
 export interface PaletteEntry {
   /** 英文连字符 id */
   id: string;
   /** 名字（≤4 字） */
   name: string;
-  /** 情绪词 */
-  mood: string;
-  /** 背景：#色值 或 CSS 渐变字符串 */
-  bgColor: string;
-  /** 字体色：#色值 */
-  fontColor: string;
+  /** 两套配色方案（互换底/字，情绪词可不同） */
+  schemes: PaletteScheme[];
   /** 从原图提取的主色板（hex 数组） */
   colors: string[];
   /** 原图访问地址（同源 /api/palette/image/<file>） */
@@ -34,9 +40,7 @@ export interface PaletteListResult {
 export interface SavePaletteInput {
   id: string;
   name: string;
-  mood: string;
-  bgColor: string;
-  fontColor: string;
+  schemes: PaletteScheme[];
   colors: string[];
   /** 原图 base64 data URL */
   imageDataUrl: string;
@@ -44,14 +48,12 @@ export interface SavePaletteInput {
 
 /**
  * 上传后、保存前的待确认草稿：
- * 提取主色 + AI 命名结果，用户可在表单里改字段再保存。
+ * 提取主色 + 两套方案 + AI 命名结果，用户可在表单里改字段再保存。
  */
 export interface PaletteDraft {
   id: string;
   name: string;
-  mood: string;
-  bgColor: string;
-  fontColor: string;
+  schemes: PaletteScheme[];
   colors: string[];
   imageDataUrl: string;
 }

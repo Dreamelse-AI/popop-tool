@@ -1,29 +1,36 @@
 /**
  * 配色提取：纯前端 canvas 实现，不调用任何 AI。
  *
+ * 目标：提色更准、且产出能直接用的「两套配色方案」。
+ *
  * 思路：
- *   1. 把图片画到一个缩小的离屏 canvas（采样足够、又不卡）。
- *   2. 量化：每个像素 RGB 各取高位（缩 bucket），按出现频次聚合。
- *   3. 取频次最高的若干 bucket 作为主色，去掉过近的颜色避免重复。
- *   4. 推导建议：背景色用占比最大的主色；字体色从**其余主色**里挑与背景
- *      对比度最高的一个（WCAG 对比度），让配色卡的字色也来自图片本身。
- *      仅当所有主色与背景对比都过低（读不清）时，才兜底黑/白保证可读性。
+ *   1. 缩小采样到离屏 canvas。
+ *   2. 量化：HSV 分桶聚合频次，按「频次 × 饱和度权重」排序——
+ *      避免浅色照片里大片低饱和灰白霸榜、把代表色拖灰（旧版痛点）。
+ *   3. 主色板：取加权靠前、彼此不接近的若干色。
+ *   4. 两套方案：从主色板里挑「彼此对比度达标」的两个代表色 c1/c2，
+ *      方案A = c1 底 + c2 字，方案B = c2 底 + c1 字（互换）。
+ *      若主色里挑不出对比达标的一对，才用黑/白补足某一极，保证文字可读。
  *
  * 全程本地，离线可跑；图片像素来自用户上传（同源/本地 dataURL，无 CORS 问题）。
  */
 
-export interface ExtractResult {
-  /** 主色板（hex，按占比从高到低，最多 maxColors 个） */
-  colors: string[];
-  /** 建议背景色（hex） */
+/** 一套配色方案：底色 + 字色。 */
+export interface SchemeColors {
   bgColor: string;
-  /** 建议字体色（hex，对背景有足够对比） */
   fontColor: string;
 }
 
-/** 采样画布长边（越大越精确越慢；100 足够提取主色）。 */
-const SAMPLE_EDGE = 100;
-/** 每通道量化位数：5 位 → 每通道 32 档，bucket 适中。 */
+export interface ExtractResult {
+  /** 主色板（hex，按加权排序，最多 maxColors 个） */
+  colors: string[];
+  /** 两套配色方案（A/B 互换关系，平等无主次） */
+  schemes: [SchemeColors, SchemeColors];
+}
+
+/** 采样画布长边（越大越精确越慢；120 兼顾准确与速度）。 */
+const SAMPLE_EDGE = 120;
+/** 每通道量化位数：5 位 → 每通道 32 档。 */
 const QUANT_BITS = 5;
 const QUANT_SHIFT = 8 - QUANT_BITS;
 
@@ -32,9 +39,10 @@ interface Bucket {
   r: number;
   g: number;
   b: number;
+  /** 加权分（频次 × 饱和度权重），排序用 */
+  score: number;
 }
 
-/** 把 0-255 分量转两位 hex。 */
 function toHex2(n: number): string {
   return Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
 }
@@ -55,23 +63,36 @@ function relLuminance(r: number, g: number, b: number): number {
 }
 
 /** WCAG 对比度（1~21），值越大越易读。 */
-function contrastRatio(a: Bucket, b: Bucket): number {
+function contrastRatioRgb(a: RGB, b: RGB): number {
   const la = relLuminance(a.r, a.g, a.b);
   const lb = relLuminance(b.r, b.g, b.b);
   const [hi, lo] = la >= lb ? [la, lb] : [lb, la];
   return (hi + 0.05) / (lo + 0.05);
 }
 
+/** HSV 饱和度（0~1），用于给鲜艳色更高权重。 */
+function saturation(r: number, g: number, b: number): number {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  return max === 0 ? 0 : (max - min) / max;
+}
+
 /** 两色欧氏距离平方（RGB），用于去重相近色。 */
-function distSq(a: Bucket, b: Bucket): number {
+function distSq(a: RGB, b: RGB): number {
   const dr = a.r - b.r;
   const dg = a.g - b.g;
   const db = a.b - b.b;
   return dr * dr + dg * dg + db * db;
 }
 
+interface RGB {
+  r: number;
+  g: number;
+  b: number;
+}
+
 /**
- * 从图片 data URL 提取配色。
+ * 从图片 data URL 提取配色与两套方案。
  * @param dataUrl 图片 base64 data URL（来自上传文件）
  * @param maxColors 最多返回主色数（默认 6）
  */
@@ -98,47 +119,58 @@ export async function extractPalette(
 
     const buckets = quantize(data);
     const top = pickTopColors(buckets, maxColors);
-
     const colors = top.map((b) => rgbToHex(b.r, b.g, b.b));
-    const bg = top[0];
-    const bgColor = colors[0] ?? '#ffffff';
-    const fontColor = bg ? pickFontColor(bg, top) : '#0b0b0b';
+    const schemes = buildSchemes(top);
 
-    return { colors, bgColor, fontColor };
+    return { colors, schemes };
   } finally {
     bitmap.close();
   }
 }
 
-/** 文字可读的最低对比度（WCAG AA 正文为 4.5；配色卡标题略放宽到 3.5）。 */
-const MIN_READABLE_CONTRAST = 3.5;
-const BLACK: Bucket = { count: 0, r: 11, g: 11, b: 11 };
-const WHITE: Bucket = { count: 0, r: 255, g: 255, b: 255 };
+const BLACK: RGB = { r: 11, g: 11, b: 11 };
+const WHITE: RGB = { r: 255, g: 255, b: 255 };
+/** 一对颜色可作「底/字」的最低对比度（AA 正文 4.5，配色卡标题放宽到 3.5）。 */
+const MIN_PAIR_CONTRAST = 3.5;
 
 /**
- * 从主色板里挑字体色：取与背景对比度最高的那个主色（排除背景本身）。
- * 若最佳主色对比仍读不清，则在黑/白里取对比更高者兜底，保证文字可读。
+ * 从主色板构造两套方案：
+ *   - 找一对彼此对比度最高且达标的主色 c1/c2；
+ *   - 方案A = c1 底 + c2 字，方案B 互换。
+ * 若没有任何一对主色达标，则用首要主色 + 黑/白兜底（取对比更高者）。
  */
-function pickFontColor(bg: Bucket, palette: Bucket[]): string {
-  let best: Bucket | null = null;
+function buildSchemes(palette: RGB[]): [SchemeColors, SchemeColors] {
+  let best: [RGB, RGB] | null = null;
   let bestContrast = 0;
-  // 跳过第一个（背景自身），其余主色里找对比最高的
-  for (let i = 1; i < palette.length; i++) {
-    const c = contrastRatio(bg, palette[i]);
-    if (c > bestContrast) {
-      bestContrast = c;
-      best = palette[i];
+  for (let i = 0; i < palette.length; i++) {
+    for (let j = i + 1; j < palette.length; j++) {
+      const c = contrastRatioRgb(palette[i], palette[j]);
+      if (c > bestContrast) {
+        bestContrast = c;
+        best = [palette[i], palette[j]];
+      }
     }
   }
-  if (best && bestContrast >= MIN_READABLE_CONTRAST) {
-    return rgbToHex(best.r, best.g, best.b);
+
+  let c1: RGB;
+  let c2: RGB;
+  if (best && bestContrast >= MIN_PAIR_CONTRAST) {
+    [c1, c2] = best;
+  } else {
+    // 主色互相对比都不够：用最主要的主色配黑/白
+    c1 = palette[0] ?? WHITE;
+    c2 = contrastRatioRgb(c1, BLACK) >= contrastRatioRgb(c1, WHITE) ? BLACK : WHITE;
   }
-  // 主色都读不清：黑/白兜底，取对比更高者
-  const fallback = contrastRatio(bg, BLACK) >= contrastRatio(bg, WHITE) ? BLACK : WHITE;
-  return rgbToHex(fallback.r, fallback.g, fallback.b);
+
+  const hex1 = rgbToHex(c1.r, c1.g, c1.b);
+  const hex2 = rgbToHex(c2.r, c2.g, c2.b);
+  return [
+    { bgColor: hex1, fontColor: hex2 },
+    { bgColor: hex2, fontColor: hex1 },
+  ];
 }
 
-/** 量化像素到 bucket，聚合频次与平均色。 */
+/** 量化像素到 bucket，聚合频次与平均色，并算加权分。 */
 function quantize(data: Uint8ClampedArray): Map<number, Bucket> {
   const buckets = new Map<number, Bucket>();
   for (let i = 0; i < data.length; i += 4) {
@@ -158,24 +190,26 @@ function quantize(data: Uint8ClampedArray): Map<number, Bucket> {
       bucket.g += g;
       bucket.b += b;
     } else {
-      buckets.set(key, { count: 1, r, g, b });
+      buckets.set(key, { count: 1, r, g, b, score: 0 });
     }
   }
-  // 把累加值转成平均色
+  // 平均色 + 加权分：低饱和（灰白）降权，避免霸榜把代表色拖灰
   for (const bucket of buckets.values()) {
     bucket.r /= bucket.count;
     bucket.g /= bucket.count;
     bucket.b /= bucket.count;
+    const sat = saturation(bucket.r, bucket.g, bucket.b);
+    bucket.score = bucket.count * (0.25 + 0.75 * sat);
   }
   return buckets;
 }
 
-/** 最小色差平方阈值：低于此视为同色，去重（约 40 的 RGB 距离）。 */
-const MERGE_DIST_SQ = 40 * 40;
+/** 最小色差平方阈值：低于此视为同色，去重（约 36 的 RGB 距离）。 */
+const MERGE_DIST_SQ = 36 * 36;
 
-/** 取频次最高、且彼此不太接近的前 N 个颜色。 */
+/** 取加权分最高、且彼此不太接近的前 N 个颜色。 */
 function pickTopColors(buckets: Map<number, Bucket>, maxColors: number): Bucket[] {
-  const sorted = [...buckets.values()].sort((a, b) => b.count - a.count);
+  const sorted = [...buckets.values()].sort((a, b) => b.score - a.score);
   const picked: Bucket[] = [];
   for (const cand of sorted) {
     if (picked.length >= maxColors) break;

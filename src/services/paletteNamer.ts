@@ -1,8 +1,8 @@
 /**
- * 配色命名 + 情绪词生成（apimart 文本模型）。
+ * 配色命名 + 双方案情绪词生成（apimart 文本模型）。
  *
- * 输入：canvas 提取出的主色 hex 数组。
- * 输出：英文连字符 id、中文名字（≤4 字）、情绪词。
+ * 输入：canvas 提取出的主色 hex 数组 + 两套方案的底色（用于分别定情绪）。
+ * 输出：英文连字符 id、中文名字（≤4 字）、两套方案各自的情绪词。
  *
  * 安全：apimart key 不出现在前端，统一走同源 /apimart 代理注入（与 promptExpander 一致）。
  * 失败兜底：模型不可用时退回本地规则命名，保证离线/异常下流程不断。
@@ -17,20 +17,23 @@ const NAMER_MODEL = 'gemini-3-flash-preview';
 export interface NamingResult {
   id: string;
   name: string;
-  mood: string;
+  /** 两套方案各自的情绪词（[方案A, 方案B]） */
+  moods: [string, string];
 }
 
 /**
- * 给一组主色起名、定情绪词。
+ * 给一组主色起名，并为两套方案分别定情绪词。
  * @param colors 主色 hex 数组（占比从高到低）
+ * @param schemeBgColors 两套方案的底色 [A, B]，让情绪贴合各自基调
  * @param signal 可选取消信号
  */
 export async function nameColors(
   colors: string[],
+  schemeBgColors: [string, string],
   signal?: AbortSignal,
 ): Promise<NamingResult> {
   try {
-    return await nameViaApimart(colors, signal);
+    return await nameViaApimart(colors, schemeBgColors, signal);
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') throw e;
     console.warn('[palette-namer] AI 命名失败，回退本地规则：', (e as Error).message);
@@ -40,14 +43,17 @@ export async function nameColors(
 
 async function nameViaApimart(
   colors: string[],
+  schemeBgColors: [string, string],
   signal?: AbortSignal,
 ): Promise<NamingResult> {
   const userContent = [
-    '你是一名资深品牌视觉与色彩设计师。根据给定的主色板，输出一个配色方案的命名与情绪词。',
+    '你是一名资深品牌视觉与色彩设计师。根据给定的主色板，输出配色方案的命名与两套方案的情绪词。',
+    '同一组颜色有两套方案：方案A 以颜色1为底，方案B 以颜色2为底，基调不同、情绪可不同。',
     '严格只返回一个 JSON 对象，不要任何解释、不要 markdown 代码块包裹。JSON 字段：',
     '- "id": 英文小写连字符 slug（2-4 个单词，如 "warm-dusk-glow"），只含 a-z 0-9 和连字符。',
     '- "name": 中文名字，最多 4 个字，富有画面感（如「暮色微醺」「青苔」）。绝不超过 4 字。',
-    '- "mood": 情绪词，2-4 个中文词用「、」分隔（如「温暖、慵懒、治愈」）。',
+    '- "moodA": 方案A（底色 ' + schemeBgColors[0] + '）的情绪词，2-4 个中文词用「、」分隔。',
+    '- "moodB": 方案B（底色 ' + schemeBgColors[1] + '）的情绪词，2-4 个中文词用「、」分隔。',
     '',
     `主色板（hex，按占比从高到低）：${colors.join(', ')}`,
   ].join('\n');
@@ -146,10 +152,14 @@ function normalize(obj: Record<string, unknown>, colors: string[]): NamingResult
   const id = typeof obj.id === 'string' && obj.id.trim() ? slugify(obj.id) : fallback.id;
   const rawName =
     typeof obj.name === 'string' && obj.name.trim() ? obj.name.trim() : fallback.name;
+  const moodA =
+    typeof obj.moodA === 'string' && obj.moodA.trim() ? obj.moodA.trim() : fallback.moods[0];
+  const moodB =
+    typeof obj.moodB === 'string' && obj.moodB.trim() ? obj.moodB.trim() : moodA;
   return {
     id: id || fallback.id,
     name: clampName(rawName),
-    mood: typeof obj.mood === 'string' && obj.mood.trim() ? obj.mood.trim() : fallback.mood,
+    moods: [moodA, moodB],
   };
 }
 
@@ -176,6 +186,6 @@ function nameMock(_colors: string[]): NamingResult {
   return {
     id: `palette-${suffix}`,
     name: '未命名',
-    mood: '中性',
+    moods: ['中性', '中性'],
   };
 }

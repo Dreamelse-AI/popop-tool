@@ -20,6 +20,8 @@ export function PalettePage() {
     load,
     analyzeFiles,
     updateDraft,
+    updateScheme,
+    swapScheme,
     discardDraft,
     discardAllDrafts,
     saveDraft,
@@ -91,7 +93,9 @@ export function PalettePage() {
                 saving={d.saving || savingAll}
                 errorMessage={d.error}
                 index={i}
-                onChange={(patch) => updateDraft(d.key, patch)}
+                onChangeMeta={(patch) => updateDraft(d.key, patch)}
+                onChangeScheme={(si, patch) => updateScheme(d.key, si, patch)}
+                onSwapScheme={(si) => swapScheme(d.key, si)}
                 onSave={() => void saveDraft(d.key)}
                 onDiscard={() => discardDraft(d.key)}
               />
@@ -130,20 +134,19 @@ interface PaletteTableProps {
   onDelete: (entry: PaletteEntry) => void;
 }
 
-/** 配色记录表格：原始图 / 配色 / id / name / mood / bgColor / fontColor / 操作。 */
+/** 配色记录表格：原始图 / 主色板 / id / name / 两套方案（底+字+情绪）/ 操作。 */
 function PaletteTable({ items, deletingId, onPreview, onDelete }: PaletteTableProps) {
   return (
     <div className="overflow-x-auto rounded-pop-lg border-2 border-ink bg-paper shadow-sticker">
-      <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+      <table className="w-full min-w-[860px] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b-2 border-ink bg-cream-soft font-mono text-[11px] uppercase text-ink-2">
             <Th>原始图</Th>
-            <Th>配色</Th>
+            <Th>主色板</Th>
             <Th>id</Th>
             <Th>name</Th>
-            <Th>mood</Th>
-            <Th>bgColor</Th>
-            <Th>fontColor</Th>
+            <Th>方案 A</Th>
+            <Th>方案 B</Th>
             <Th>操作</Th>
           </tr>
         </thead>
@@ -161,7 +164,7 @@ function PaletteTable({ items, deletingId, onPreview, onDelete }: PaletteTablePr
                 </button>
               </Td>
               <Td>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex max-w-[7rem] flex-wrap gap-1">
                   {entry.colors.map((c) => (
                     <span
                       key={c}
@@ -178,15 +181,11 @@ function PaletteTable({ items, deletingId, onPreview, onDelete }: PaletteTablePr
               <Td>
                 <span className="font-semibold text-ink">{entry.name}</span>
               </Td>
-              <Td>
-                <span className="text-ink-2">{entry.mood}</span>
-              </Td>
-              <Td>
-                <SwatchValue value={entry.bgColor} />
-              </Td>
-              <Td>
-                <SwatchValue value={entry.fontColor} />
-              </Td>
+              {[0, 1].map((i) => (
+                <Td key={i}>
+                  <SchemeCell scheme={entry.schemes[i]} name={entry.name} />
+                </Td>
+              ))}
               <Td>
                 <button
                   type="button"
@@ -201,6 +200,26 @@ function PaletteTable({ items, deletingId, onPreview, onDelete }: PaletteTablePr
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** 方案单元格：底/字色预览块 + 两个色值 + 情绪词。 */
+function SchemeCell({ scheme, name }: { scheme?: import('@/types/palette').PaletteScheme; name: string }) {
+  if (!scheme) return <span className="text-ink-3">—</span>;
+  return (
+    <div className="min-w-[9rem]">
+      <div
+        className="mb-1 flex h-9 items-center justify-center rounded border-2 border-ink text-center"
+        style={{ background: scheme.bgColor, color: scheme.fontColor }}
+      >
+        <span className="font-display text-xs font-extrabold">{name || '预览'}</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <SwatchValue value={scheme.bgColor} />
+        <SwatchValue value={scheme.fontColor} />
+      </div>
+      {scheme.mood && <div className="mt-1 text-[11px] text-ink-2">{scheme.mood}</div>}
     </div>
   );
 }
