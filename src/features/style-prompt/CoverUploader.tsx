@@ -1,38 +1,50 @@
 /**
- * 画风封面图上传：选本地图 → 转 base64 → 上传 OSS → 回填 url。
- * 支持显示已有封面、替换、清空。单张。
+ * 画风图标上传：选本地图 → 调后端 upload_icon（multipart）拿 StorageObject → 暂存。
+ *
+ * 两步法：上传只是「暂存」，真正生效在画风 save（把 StorageObject 作为 style_icon 传回）。
+ * 支持显示已有封面（签名直链）/ 新上传预览、替换、清空。单张。
+ * 限制：jpg / png / webp / gif，≤ 8MB（与后端一致）。
  */
 
 import { useRef, useState } from 'react';
-import { filesToDataUrls } from '@/features/sticker/fileToDataUrl';
-import { uploadStyleCover } from '@/services/styleCover';
+import { uploadStyleIcon } from '@/services/stylePrompt';
+import type { StorageObject } from '@/types/stylePrompt';
+
+const MAX_BYTES = 8 * 1024 * 1024;
+const ACCEPT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 interface CoverUploaderProps {
-  /** 当前封面 URL（已上传的）。 */
+  /** 当前封面预览 URL（已有图标签名直链或新上传 url）。 */
   value: string;
-  /** 上传成功后回填 URL；清空时回传空串。 */
-  onChange: (url: string) => void;
+  /** 上传成功（拿到 StorageObject）后回调。 */
+  onUpload: (obj: StorageObject) => void;
+  /** 清空封面回调。 */
+  onClear: () => void;
 }
 
-export function CoverUploader({ value, onChange }: CoverUploaderProps) {
+export function CoverUploader({ value, onUpload, onClear }: CoverUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+    const file = files?.[0];
+    if (!file) return;
+    if (!ACCEPT_TYPES.includes(file.type)) {
+      setError('仅支持 jpg / png / webp / gif');
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      setError('图片不能超过 8MB');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const dataUrls = await filesToDataUrls(files);
-      if (dataUrls.length === 0) {
-        setError('请选择图片文件');
-        return;
-      }
-      const url = await uploadStyleCover(dataUrls[0]);
-      onChange(url);
+      const obj = await uploadStyleIcon(file);
+      onUpload(obj);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '上传封面失败');
+      setError(e instanceof Error ? e.message : '上传图标失败');
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -48,7 +60,7 @@ export function CoverUploader({ value, onChange }: CoverUploaderProps) {
             <img src={value} alt="封面" className="h-full w-full object-cover" />
             <button
               type="button"
-              onClick={() => onChange('')}
+              onClick={onClear}
               aria-label="移除封面"
               className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full border border-cream bg-ink text-xs text-cream opacity-0 transition group-hover:opacity-100"
             >
@@ -86,7 +98,7 @@ export function CoverUploader({ value, onChange }: CoverUploaderProps) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept={ACCEPT_TYPES.join(',')}
         className="hidden"
         onChange={(e) => void handleFiles(e.target.files)}
       />
