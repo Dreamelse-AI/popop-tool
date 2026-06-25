@@ -48,6 +48,15 @@ const TOOLS: ToolEntry[] = [
     status: 'available',
     tag: 'AIGC',
   },
+  {
+    id: 'style-prompt',
+    name: '画风生图工具',
+    description:
+      '管理画风库（增改删 + 封面图），用画风 + 人物等提示词测试出图（单张/多张），满意的存为新画风。',
+    path: '/tools/style-prompt',
+    status: 'available',
+    tag: 'AIGC',
+  },
 ];
 
 export function HomePage() {

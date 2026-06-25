@@ -46,6 +46,44 @@ function imageProxyPlugin(): PluginOption {
   };
 }
 
+/**
+ * dev 专用：注入 OSS 环境变量并挂封面上传中间件，复用生产同一套 handleCoverUpload，
+ * 避免 dev/prod 两套上传逻辑分叉。
+ */
+function styleCoverUploadPlugin(env: Record<string, string>): PluginOption {
+  return {
+    name: 'style-cover-upload-dev',
+    configureServer(server) {
+      for (const k of [
+        'OSS_REGION',
+        'OSS_BUCKET',
+        'OSS_ACCESS_KEY_ID',
+        'OSS_ACCESS_KEY_SECRET',
+        'OSS_PREFIX',
+      ]) {
+        if (env[k] && !process.env[k]) process.env[k] = env[k];
+      }
+      server.middlewares.use('/api/style-cover/upload', (req, res, next) => {
+        if (req.method !== 'POST') return next();
+        void server
+          .ssrLoadModule('/server/coverUploadHandler.ts')
+          .then(({ handleCoverUpload }) => handleCoverUpload(req, res))
+          .catch((err: unknown) => {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(
+              JSON.stringify({
+                code: 500,
+                msg: err instanceof Error ? err.message : '上传失败',
+                data: null,
+              }),
+            );
+          });
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   // 读取 .env 里的密钥，仅在 dev server 进程内使用，绝不暴露给前端 bundle
   const env = loadEnv(mode, process.cwd(), '');
@@ -58,7 +96,7 @@ export default defineConfig(({ mode }) => {
   const arcaOrigin = env.ARCA_ORIGIN ?? 'https://i18n-api.imaginewithu.com';
 
   return {
-    plugins: [react(), tailwindcss(), imageProxyPlugin()],
+    plugins: [react(), tailwindcss(), imageProxyPlugin(), styleCoverUploadPlugin(env)],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, 'src'),
