@@ -174,18 +174,19 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
     // [WORKER]
     // 单张：扩写 → 出图，带瞬时错误自动退避重试
     const produceOne = async (item: AssetResultItem): Promise<void> => {
-      update(item.id, { status: 'generating', error: undefined });
+      update(item.id, { status: 'generating', phase: 'expanding', error: undefined });
       for (let attempt = 0; attempt <= AUTO_RETRY_MAX; attempt++) {
         if (controller.signal.aborted) return;
         try {
+          update(item.id, { status: 'generating', phase: 'expanding' });
           const { prompt, via } = await expandToPrompt(item.config, styles, controller.signal);
-          update(item.id, { prompt, expandedVia: via });
+          update(item.id, { prompt, expandedVia: via, phase: 'imaging' });
           const image = await generateImageByPrompt(
             prompt,
             { size: ratio, resolution },
             controller.signal,
           );
-          update(item.id, { status: 'done', url: image.url });
+          update(item.id, { status: 'done', phase: undefined, url: image.url });
           // 出图成功后自动存档（永久化），失败不影响出图结果展示
           void get().archiveItem(item.id);
           return;
@@ -204,7 +205,7 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
           }
           const msg =
             e instanceof ImageGenError ? e.message : e instanceof Error ? e.message : '生成失败';
-          update(item.id, { status: 'error', error: msg });
+          update(item.id, { status: 'error', phase: undefined, error: msg });
           return;
         }
       }
@@ -239,16 +240,21 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
 
     set((s) => ({
       items: s.items.map((it) =>
-        it.id === id ? { ...it, status: 'generating', error: undefined } : it,
+        it.id === id ? { ...it, status: 'generating', phase: 'expanding', error: undefined } : it,
       ),
     }));
 
     try {
       const { prompt, via } = await expandToPrompt(target.config, styles, controller.signal);
+      set((s) => ({
+        items: s.items.map((it) =>
+          it.id === id ? { ...it, prompt, expandedVia: via, phase: 'imaging' } : it,
+        ),
+      }));
       const image = await generateImageByPrompt(prompt, { size: ratio, resolution }, controller.signal);
       set((s) => ({
         items: s.items.map((it) =>
-          it.id === id ? { ...it, status: 'done', prompt, expandedVia: via, url: image.url } : it,
+          it.id === id ? { ...it, status: 'done', phase: undefined, prompt, expandedVia: via, url: image.url } : it,
         ),
       }));
       void get().archiveItem(id);
@@ -256,7 +262,7 @@ export const useVisualAssetStore = create<VisualAssetState>((set, get) => ({
       if (e instanceof DOMException && e.name === 'AbortError') return;
       const msg = e instanceof ImageGenError ? e.message : e instanceof Error ? e.message : '生成失败';
       set((s) => ({
-        items: s.items.map((it) => (it.id === id ? { ...it, status: 'error', error: msg } : it)),
+        items: s.items.map((it) => (it.id === id ? { ...it, status: 'error', phase: undefined, error: msg } : it)),
       }));
     }
   },

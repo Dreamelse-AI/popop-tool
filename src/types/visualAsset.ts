@@ -100,6 +100,8 @@ export interface AssetResultItem {
   /** prompt 来源：llm = 真实模型扩写；mock = 本地兜底拼接 */
   expandedVia?: 'llm' | 'mock';
   status: AssetItemStatus;
+  /** generating 时的细分阶段：expanding 扩写中 / imaging 出图中 */
+  phase?: 'expanding' | 'imaging';
   /** 成功后的图片直链 */
   url?: string;
   /** 失败原因 */

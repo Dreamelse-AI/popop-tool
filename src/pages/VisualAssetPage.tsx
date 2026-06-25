@@ -53,7 +53,8 @@ export function VisualAssetPage() {
   const total = items.length;
   const doneCount = items.filter((i) => i.status === 'done').length;
   const errorCount = items.filter((i) => i.status === 'error').length;
-  const runningCount = items.filter((i) => i.status === 'generating').length;
+  const expandingCount = items.filter((i) => i.status === 'generating' && i.phase === 'expanding').length;
+  const imagingCount = items.filter((i) => i.status === 'generating' && i.phase === 'imaging').length;
   const archivedCount = items.filter((i) => i.archiveStatus === 'archived').length;
   const finishedCount = doneCount + errorCount;
   const progressPct = total > 0 ? Math.round((finishedCount / total) * 100) : 0;
@@ -224,7 +225,8 @@ export function VisualAssetPage() {
                 <div className="mb-1.5 flex items-center justify-between text-xs font-semibold text-ink-2">
                   <span>
                     进度 {finishedCount}/{total}
-                    {runningCount > 0 && <span className="ml-1 text-ink-3">· 生成中 {runningCount}</span>}
+                    {expandingCount > 0 && <span className="ml-1 text-ink-3">· 扩写中 {expandingCount}</span>}
+                    {imagingCount > 0 && <span className="ml-1 text-ink-3">· 出图中 {imagingCount}</span>}
                   </span>
                   <span className="tabular-nums text-ink-3">{progressPct}%</span>
                 </div>
@@ -276,7 +278,12 @@ export function VisualAssetPage() {
                           </button>
                         </div>
                       ) : (
-                        <span className="pop-spinner h-6 w-6" />
+                        <div className="flex flex-col items-center gap-1.5">
+                          <span className="pop-spinner h-6 w-6" />
+                          <span className="text-[10px] text-ink-3">
+                            {item.phase === 'imaging' ? '出图中…' : item.phase === 'expanding' ? '扩写中…' : '排队中…'}
+                          </span>
+                        </div>
                       )}
                     </div>
                     <div className="flex items-center justify-between gap-1 border-t-2 border-ink px-2 py-1.5">
