@@ -59,7 +59,7 @@ const TOOLS: ToolEntry[] = [
   },
   {
     id: 'palette',
-    name: '配色情绪库',
+    name: '情绪配色库',
     description:
       '拖入图片自动识别主色配色，AI 给出命名与适用情绪氛围场景，永久存储在服务器，可表格管理与删除。',
     path: '/tools/palette',

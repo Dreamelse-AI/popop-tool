@@ -6,7 +6,7 @@ import { ToolHeader } from '@/components/ToolHeader';
 import { Lightbox } from '@/components/Lightbox';
 import type { PaletteEntry } from '@/types/palette';
 
-/** 配色情绪库工具页：拖图/粘贴识别配色 → 命名/情绪词 → 永久存储 + 表格管理。 */
+/** 情绪配色库工具页：拖图/粘贴识别配色 → 命名/情绪词 → 永久存储 + 表格管理。 */
 export function PalettePage() {
   const {
     items,
@@ -51,7 +51,7 @@ export function PalettePage() {
   return (
     <div className="min-h-full">
       <ToolHeader
-        title="配色情绪库"
+        title="情绪配色库"
         subtitle={`拖入 / 粘贴图片自动识别配色与命名，永久存储在服务器 · 已存 ${total} 条`}
       />
 

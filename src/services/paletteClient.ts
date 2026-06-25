@@ -1,5 +1,5 @@
 /**
- * 配色情绪库 API 客户端。
+ * 情绪配色库 API 客户端。
  *
  * 走同源 /api/palette（dev 由 vite 中间件、生产由 Express 提供），
  * 统一信封 { code, msg, data }，code=0 成功。

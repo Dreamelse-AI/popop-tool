@@ -1,5 +1,5 @@
 /**
- * 配色情绪库 HTTP 处理（框架无关，传入 Node 原生 req/res）。
+ * 情绪配色库 HTTP 处理（框架无关，传入 Node 原生 req/res）。
  *
  * 路由（挂载前缀 /api/palette，由调用方剥离前缀或在此按完整路径匹配）：
  *   GET    /api/palette/list              列出全部记录（倒序）

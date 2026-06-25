@@ -1,5 +1,5 @@
 /**
- * 配色情绪库前端类型契约。
+ * 情绪配色库前端类型契约。
  *
  * 对应服务端 server/paletteStore.ts 的 PaletteRecord（camelCase 一致，路由层不做转换）。
  */

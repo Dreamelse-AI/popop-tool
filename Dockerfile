@@ -53,12 +53,12 @@ COPY --from=deps  /app/node_modules ./node_modules
 COPY --from=build /app/dist         ./dist
 COPY package.json ./
 
-# 预建配色情绪库的数据目录并归属 node 用户。
-# 服务端默认把图片/元数据写到 /app/.data（可用 PALETTE_DATA_DIR 覆盖）。
-# 容器以 USER node 运行，/app 属 root，若不预建并 chown，首次写盘会 EACCES → 接口 500。
-# 生产应把该目录挂持久卷（如 PVC / volume）以跨重启保留数据；VOLUME 声明默认匿名卷兜底。
+# 预建情绪配色库的数据目录并归属 node 用户。
+# 说明：该工具的最终存储将迁移到「图片传公开 OSS + 表单存独立后端数据库」，
+# 不再依赖容器本地持久卷。在后端 OSS/DB 就绪前，服务端文件存储作为临时兜底：
+# 容器以 USER node 运行、/app 属 root，若不预建并 chown，首次写盘会 EACCES → 接口 500。
+# 故仅保留可写目录，不声明 VOLUME（迁移后该目录可整体废弃）。
 RUN mkdir -p /app/.data/palette-images && chown -R node:node /app/.data
-VOLUME ["/app/.data"]
 
 USER node
 EXPOSE 3000

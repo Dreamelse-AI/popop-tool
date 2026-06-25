@@ -6,7 +6,7 @@ import path from 'node:path';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
 /**
- * dev 环境挂配色情绪库后端（生产由 Express 承担）。
+ * dev 环境挂情绪配色库后端（生产由 Express 承担）。
  * 复用 server/paletteRoutes 的框架无关 handler，dev 与生产行为一致。
  */
 function palettePlugin(): PluginOption {
