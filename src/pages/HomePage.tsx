@@ -66,6 +66,15 @@ const TOOLS: ToolEntry[] = [
     status: 'available',
     tag: 'AIGC',
   },
+  {
+    id: 'prompt-extraction',
+    name: '提示词提取工具',
+    description:
+      '上传/粘贴/拖入图片（单张或批量），自动分析完整提示词与关键画风提示词，可修改后重新生成验证图。',
+    path: '/tools/prompt-extraction',
+    status: 'available',
+    tag: 'AIGC',
+  },
 ];
 
 export function HomePage() {
