@@ -17,7 +17,6 @@ import express from 'express';
 import { createApimartProxy } from './apimartProxy';
 import { createArcaProxy } from './arcaProxy';
 import { createImageProxy } from './imageProxy';
-import { handlePalette } from './paletteRoutes';
 import { createAuthMiddleware } from './auth';
 import { handleCoverUpload } from './coverUploadHandler';
 
@@ -48,12 +47,6 @@ app.use('/arca', createArcaProxy());
 
 // 图片只读代理：表情包 canvas 切图/抠图需读跨域图片像素，经此同源代取规避 CORS
 app.get('/api/img-proxy', createImageProxy());
-
-// 情绪配色库：服务端文件存储（列表/保存/删除/原图），永久存储不依赖浏览器本地
-app.use('/api/palette', (req, res) => {
-  // express 子路由挂载后 req.url 已去掉 /api/palette 前缀
-  void handlePalette(req, res, req.url || '/');
-});
 
 // 画风封面图上传：前端发 base64，服务端用 OSS SDK 直传，返回可访问 URL
 app.post('/api/style-cover/upload', (req, res) => {

@@ -8,13 +8,11 @@ import {
 
 interface PaletteDraftEditorProps {
   draft: PaletteDraft;
-  saving: boolean;
-  errorMessage: string | null;
   index?: number;
   onChangeMeta: (patch: Partial<Pick<PaletteDraft, 'id'>>) => void;
   onChangeScheme: (schemeIndex: number, patch: Partial<PaletteScheme>) => void;
   onSwapScheme: (schemeIndex: number) => void;
-  onSave: () => void;
+  onExport: () => void;
   onDiscard: () => void;
 }
 
@@ -41,17 +39,15 @@ interface ActiveTarget {
  */
 export function PaletteDraftEditor({
   draft,
-  saving,
-  errorMessage,
   index,
   onChangeMeta,
   onChangeScheme,
   onSwapScheme,
-  onSave,
+  onExport,
   onDiscard,
 }: PaletteDraftEditorProps) {
   const idValid = /^[a-z0-9][a-z0-9-]*$/.test(draft.id);
-  const canSave = !saving && idValid && draft.id.length > 0;
+  const canExport = idValid && draft.id.length > 0;
 
   // 激活的取色目标（点主色板/点原图时填入这里），默认方案A底色
   const [active, setActive] = useState<ActiveTarget>({ schemeIndex: 0, field: 'bgColor' });
@@ -90,7 +86,7 @@ export function PaletteDraftEditor({
             <span className="ml-2 font-mono text-[11px] font-normal text-ink-3">#{index + 1}</span>
           )}
         </span>
-        <button type="button" onClick={onDiscard} className="pop-link" disabled={saving}>
+        <button type="button" onClick={onDiscard} className="pop-link">
           丢弃
         </button>
       </div>
@@ -169,16 +165,14 @@ export function PaletteDraftEditor({
         </div>
       </div>
 
-      {errorMessage && <div className="pop-callout-err mt-3">{errorMessage}</div>}
-
       <div className="mt-4 flex justify-end">
         <button
           type="button"
-          onClick={onSave}
-          disabled={!canSave}
+          onClick={onExport}
+          disabled={!canExport}
           className="pop-btn-primary px-5 py-2 text-sm"
         >
-          {saving ? '保存中…' : '永久保存到配色库'}
+          导出 CSV
         </button>
       </div>
     </div>
