@@ -2,17 +2,17 @@
  * 提示词提取与整理工具 store。
  *
  * 一张图片 = 一个 group，组内流程串行：
- *   1. 调多模态模型分析 → 得到 fullPrompt（完整提示词）+ stylePrompt（关键画风提示词）
- *   2. 用 fullPrompt 调生图模型 → 得到验证图
+ *   1. 调多模态模型分析 → 得到 contentPrompt（内容词）+ stylePrompt（风格词），两块互不重叠
+ *   2. 完整提示词 = 内容词 + 风格词（buildFullPrompt 拼接），用它调生图模型 → 验证图
  *
  * 多个 group 用并发 worker 池处理（同视觉资产引擎 / 画风测试）。
- * 提示词可编辑，编辑后可「重新生成」（仅重跑出图）或「重新分析」（重跑分析再出图）。
+ * 内容词 / 风格词均可编辑，改任一块完整提示词实时跟着变；可「重新生成」（仅重出图）或「重新分析」。
  *
  * 模型调用复用：分析 services/promptExtractor，出图 services/imageClient（apimart gpt-image-2）。
  */
 
 import { create } from 'zustand';
-import { extractPromptsFromImage } from '@/services/promptExtractor';
+import { extractPromptsFromImage, buildFullPrompt } from '@/services/promptExtractor';
 import { generateImageByPrompt, ImageGenError } from '@/services/imageClient';
 
 /** 并发上限，避免打爆 apimart。 */
@@ -27,8 +27,8 @@ export interface PromptGroup {
   /** 源图（base64 data URI），左列展示与分析输入。 */
   sourceUrl: string;
   status: GroupStatus;
-  /** 完整提示词（可编辑）。 */
-  fullPrompt: string;
+  /** 内容提示词（可编辑）：主体/场景/动作/氛围，不含风格。 */
+  contentPrompt: string;
   /** 关键画风提示词（可编辑），供后续画风工具复用。 */
   stylePrompt: string;
   /** 验证图直链。 */
@@ -50,11 +50,11 @@ interface ExtractionState {
 
   /** 接收一批图片（已转 data URI），逐个建组并自动跑完整流程。 */
   addImages: (dataUrls: string[]) => Promise<void>;
-  /** 编辑某组完整提示词。 */
-  setFullPrompt: (id: string, v: string) => void;
+  /** 编辑某组内容提示词。 */
+  setContentPrompt: (id: string, v: string) => void;
   /** 编辑某组画风提示词。 */
   setStylePrompt: (id: string, v: string) => void;
-  /** 用当前 fullPrompt 重新生成验证图（不重新分析）。 */
+  /** 用当前 内容词+风格词 拼接出的完整提示词重新生成验证图（不重新分析）。 */
   regenerate: (id: string) => Promise<void>;
   /** 重新分析该组（再自动重新出图）。 */
   reanalyze: (id: string) => Promise<void>;
@@ -85,7 +85,7 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
       id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
       sourceUrl: url,
       status: 'pending',
-      fullPrompt: '',
+      contentPrompt: '',
       stylePrompt: '',
     }));
 
@@ -111,12 +111,12 @@ export const useExtractionStore = create<ExtractionState>((set, get) => ({
     if (get()._abort === controller) set({ busy: false, _abort: null });
   },
 
-  setFullPrompt: (id, v) => patchGroup(set, id, { fullPrompt: v }),
+  setContentPrompt: (id, v) => patchGroup(set, id, { contentPrompt: v }),
   setStylePrompt: (id, v) => patchGroup(set, id, { stylePrompt: v }),
 
   regenerate: async (id) => {
     const group = get().groups.find((g) => g.id === id);
-    if (!group || !group.fullPrompt.trim()) return;
+    if (!group || !buildFullPrompt(group.contentPrompt, group.stylePrompt)) return;
     const controller = get()._abort ?? new AbortController();
     patchGroup(set, id, { status: 'generating', error: undefined });
     try {
@@ -190,7 +190,7 @@ async function runAnalyze(
   try {
     const result = await extractPromptsFromImage(group.sourceUrl, signal);
     patchGroup(set, id, {
-      fullPrompt: result.fullPrompt,
+      contentPrompt: result.contentPrompt,
       stylePrompt: result.stylePrompt,
     });
     return true;
@@ -202,7 +202,7 @@ async function runAnalyze(
   }
 }
 
-/** 出图阶段：用当前 fullPrompt 生成验证图。 */
+/** 出图阶段：用 内容词+风格词 拼接出的完整提示词生成验证图。 */
 async function runGenerate(
   get: GetState,
   set: SetState,
@@ -211,9 +211,9 @@ async function runGenerate(
 ): Promise<void> {
   const group = get().groups.find((g) => g.id === id);
   if (!group) return;
-  const prompt = group.fullPrompt.trim();
+  const prompt = buildFullPrompt(group.contentPrompt, group.stylePrompt);
   if (!prompt) {
-    patchGroup(set, id, { status: 'error', error: '完整提示词为空，无法生成' });
+    patchGroup(set, id, { status: 'error', error: '提示词为空，无法生成' });
     return;
   }
   patchGroup(set, id, { status: 'generating', error: undefined });

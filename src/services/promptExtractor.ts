@@ -2,8 +2,11 @@
  * 提示词提取服务（apimart 多模态模型）。
  *
  * 输入：一张图片（base64 data URI 或公网 URL）。
- * 输出：完整提示词（用于复刻整张图）+ 关键画风提示词（剥离主体内容、只保留风格/媒介/光影/色彩/质感，
- *       供后续画风工具复用）。
+ * 输出：内容提示词（主体/场景/动作/氛围，不含风格）+ 关键画风提示词（媒介/技法/线条/光影/
+ *       色彩/质感等可迁移要素，供后续画风工具复用）。
+ *
+ * 设计：把图片拆成「内容」与「风格」两块互不重叠的要素，由调用方拼接成完整提示词
+ *       （完整提示词 = 内容 + 风格），保证完整提示词必然包含风格词，不再出现两者措辞不一致。
  *
  * 安全：apimart key 不出现在前端，统一走同源 /apimart 代理注入（与 imageClient / promptExpander 一致）。
  * 失败兜底：无法解析时抛错，由 store 落到该组 error 态，用户可单独重试。
@@ -18,12 +21,20 @@ const APIMART_BASE = '/apimart';
  */
 const VISION_MODEL = 'gemini-3-flash-preview';
 
-/** 提取结果。 */
+/** 提取结果：内容与风格两块互不重叠的要素。 */
 export interface ExtractResult {
-  /** 完整提示词：尽可能完整复刻整张图（主体 + 场景 + 风格 + 光影 + 色彩 + 构图之外的内容）。 */
-  fullPrompt: string;
-  /** 关键画风提示词：只含风格/媒介/光影/色彩/质感等可迁移要素，不含具体主体内容。 */
+  /** 内容提示词：主体 / 场景 / 动作 / 表情 / 氛围，不含任何画风描述。 */
+  contentPrompt: string;
+  /** 关键画风提示词：媒介 / 技法 / 线条 / 光影 / 色彩 / 质感等可迁移要素，不含具体主体内容。 */
   stylePrompt: string;
+}
+
+/**
+ * 拼接内容词与风格词为完整提示词（完整 = 内容 + 风格）。
+ * 单一拼接口径，service / store / 页面预览共用，保证三处一致。
+ */
+export function buildFullPrompt(contentPrompt: string, stylePrompt: string): string {
+  return [contentPrompt.trim(), stylePrompt.trim()].filter(Boolean).join('\n\n');
 }
 
 /**
@@ -37,13 +48,19 @@ export async function extractPromptsFromImage(
 ): Promise<ExtractResult> {
   const userText = [
     'You are an expert prompt engineer for text-to-image models.',
-    'Analyze the attached image and return STRICTLY a single JSON object, no markdown, no explanation.',
+    'Analyze the attached image carefully and split it into two NON-OVERLAPPING parts.',
+    'Return STRICTLY a single JSON object, no markdown, no explanation.',
     'JSON fields:',
-    '- "fullPrompt": one detailed English image-generation prompt that would faithfully recreate this image.',
-    '  Cover subject, scene, mood, lighting, color and texture. Do NOT mention aspect ratio, framing or camera crop.',
-    '- "stylePrompt": ONLY the transferable visual style — art medium, rendering technique, line/shading,',
-    '  color palette, texture and overall aesthetic. Exclude the specific subject/content so it can be reused',
-    '  on other subjects. Keep it concise (under 60 words), English.',
+    '- "contentPrompt": the SUBJECT and SCENE only — who/what is in the image, their appearance,',
+    '  pose, expression, action, objects, background and overall mood. Be specific and faithful',
+    '  (concrete nouns and details you can actually see). Do NOT describe any art style, medium,',
+    '  rendering technique, brush stroke, line work, color grading or aesthetic here.',
+    '  Do NOT mention aspect ratio, framing or camera crop.',
+    '- "stylePrompt": the transferable VISUAL STYLE only — art medium (e.g. watercolor, 3D render,',
+    '  flat vector), rendering technique, line and shading, color palette/grading, texture, lighting',
+    '  treatment and overall aesthetic. Describe it so it can be reused on a completely different subject.',
+    '  Exclude the specific subject/content. Keep it concise (under 60 words).',
+    'Both fields must be in English. The two parts must NOT repeat each other.',
   ].join('\n');
 
   const res = await fetch(`${APIMART_BASE}/v1/chat/completions`, {
@@ -65,7 +82,7 @@ export async function extractPromptsFromImage(
           ],
         },
       ],
-      temperature: 0.5,
+      temperature: 0.3,
       stream: false,
     }),
     signal,
@@ -132,12 +149,12 @@ function parseJsonLoose(text: string): Record<string, unknown> {
 
 /** 把模型输出规整成 ExtractResult，缺字段时互相兜底，保证两字段都非空。 */
 function normalize(obj: Record<string, unknown>): ExtractResult {
-  const full = typeof obj.fullPrompt === 'string' ? obj.fullPrompt.trim() : '';
+  const content = typeof obj.contentPrompt === 'string' ? obj.contentPrompt.trim() : '';
   const style = typeof obj.stylePrompt === 'string' ? obj.stylePrompt.trim() : '';
-  if (!full && !style) throw new Error('分析结果为空，请重试');
+  if (!content && !style) throw new Error('分析结果为空，请重试');
   return {
-    fullPrompt: full || style,
-    stylePrompt: style || full,
+    contentPrompt: content || style,
+    stylePrompt: style,
   };
 }
 
