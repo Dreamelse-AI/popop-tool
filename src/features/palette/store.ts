@@ -36,6 +36,8 @@ interface PaletteState {
   updateDraft: (key: string, patch: Partial<PaletteDraft>) => void;
   /** 编辑某条草稿里某套方案的字段（schemeIndex: 0|1） */
   updateScheme: (key: string, schemeIndex: number, patch: Partial<PaletteScheme>) => void;
+  /** 互换某条草稿里某套方案的底色/字色（仅纯色底有意义） */
+  swapScheme: (key: string, schemeIndex: number) => void;
   /** 丢弃某条草稿 */
   discardDraft: (key: string) => void;
   /** 丢弃全部草稿 */
@@ -106,6 +108,22 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
               ...d,
               schemes: d.schemes.map((sc, i) =>
                 i === schemeIndex ? { ...sc, ...patch } : sc,
+              ),
+            }
+          : d,
+      ),
+    })),
+
+  swapScheme: (key, schemeIndex) =>
+    set((s) => ({
+      drafts: s.drafts.map((d) =>
+        d.key === key
+          ? {
+              ...d,
+              schemes: d.schemes.map((sc, i) =>
+                i === schemeIndex
+                  ? { ...sc, bgColor: sc.fontColor, fontColor: sc.bgColor }
+                  : sc,
               ),
             }
           : d,
