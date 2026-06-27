@@ -8,9 +8,13 @@
  *   2. 量化：HSV 分桶聚合频次，按「频次 × 饱和度权重」排序——
  *      避免浅色照片里大片低饱和灰白霸榜、把代表色拖灰（旧版痛点）。
  *   3. 主色板：取加权靠前、彼此不接近的若干色。
- *   4. 两套方案：从主色板里挑「彼此对比度达标」的两个代表色 c1/c2，
- *      方案A = c1 底 + c2 字，方案B = c2 底 + c1 字（互换）。
- *      若主色里挑不出对比达标的一对，才用黑/白补足某一极，保证文字可读。
+ *   4. 渐变检测：判断整图是否为「颜色随位置平滑过渡」的渐变（含多色渐变）；
+ *      判定方式 = 沿 水平/垂直/两对角 四个方向分带，找「带内方差最小」的方向，
+ *      该方向带内方差占总方差比例足够低、且首尾色差足够大 → 认定为渐变。
+ *   5. 两套方案：
+ *      - 普通图：方案A = 主色1 纯色底，方案B = 主色2 纯色底；
+ *      - 渐变图：方案A/B 均为渐变底（方向与起止色不同）。
+ *      字色统一按底色深浅自动取黑/白（对比更高者），保证可读。
  *
  * 全程本地，离线可跑；图片像素来自用户上传（同源/本地 dataURL，无 CORS 问题）。
  */
@@ -120,7 +124,8 @@ export async function extractPalette(
     const buckets = quantize(data);
     const top = pickTopColors(buckets, maxColors);
     const colors = top.map((b) => rgbToHex(b.r, b.g, b.b));
-    const schemes = buildSchemes(top);
+    const gradient = detectGradient(data, w, h);
+    const schemes = buildSchemes(top, gradient);
 
     return { colors, schemes };
   } finally {
@@ -128,46 +133,83 @@ export async function extractPalette(
   }
 }
 
+const BLACK_HEX = '#0b0b0b';
+const WHITE_HEX = '#ffffff';
 const BLACK: RGB = { r: 11, g: 11, b: 11 };
 const WHITE: RGB = { r: 255, g: 255, b: 255 };
-/** 一对颜色可作「底/字」的最低对比度（AA 正文 4.5，配色卡标题放宽到 3.5）。 */
-const MIN_PAIR_CONTRAST = 3.5;
+
+/** 按底色深浅自动取字色：和黑/白比，谁对比高用谁。 */
+function autoFontColor(bg: RGB): string {
+  return contrastRatioRgb(bg, BLACK) >= contrastRatioRgb(bg, WHITE) ? BLACK_HEX : WHITE_HEX;
+}
+
+/** 解析 #rgb / #rrggbb 为 RGB，非法返回 null。 */
+function parseHex(hex: string): RGB | null {
+  const s = hex.trim().replace(/^#/, '');
+  if (/^[0-9a-fA-F]{3}$/.test(s)) {
+    return {
+      r: parseInt(s[0] + s[0], 16),
+      g: parseInt(s[1] + s[1], 16),
+      b: parseInt(s[2] + s[2], 16),
+    };
+  }
+  if (/^[0-9a-fA-F]{6}$/.test(s)) {
+    return {
+      r: parseInt(s.slice(0, 2), 16),
+      g: parseInt(s.slice(2, 4), 16),
+      b: parseInt(s.slice(4, 6), 16),
+    };
+  }
+  return null;
+}
+
+/**
+ * 给定纯色底（#hex），返回自动字色（黑/白）。
+ * 供编辑器在用户改底色后实时重算字色用；非纯色 hex 返回 null（如渐变底，字色不重算）。
+ */
+export function fontColorForBg(bgHex: string): string | null {
+  const rgb = parseHex(bgHex);
+  return rgb ? autoFontColor(rgb) : null;
+}
+
+/** 渐变底取「中点色」近似其整体明度，用于决定黑/白字。 */
+function gradientMidColor(stops: RGB[]): RGB {
+  return stops[Math.floor(stops.length / 2)] ?? WHITE;
+}
 
 /**
  * 从主色板构造两套方案：
- *   - 找一对彼此对比度最高且达标的主色 c1/c2；
- *   - 方案A = c1 底 + c2 字，方案B 互换。
- * 若没有任何一对主色达标，则用首要主色 + 黑/白兜底（取对比更高者）。
+ *   - 渐变图：方案A/B 均为渐变底（135° / 315° 两个方向，起止/顺序不同），字色按中点明度自动黑/白；
+ *   - 普通图：方案A = 主色1 纯色底，方案B = 主色2 纯色底，字色各自按明度自动黑/白。
  */
-function buildSchemes(palette: RGB[]): [SchemeColors, SchemeColors] {
-  let best: [RGB, RGB] | null = null;
-  let bestContrast = 0;
-  for (let i = 0; i < palette.length; i++) {
-    for (let j = i + 1; j < palette.length; j++) {
-      const c = contrastRatioRgb(palette[i], palette[j]);
-      if (c > bestContrast) {
-        bestContrast = c;
-        best = [palette[i], palette[j]];
-      }
-    }
+function buildSchemes(palette: RGB[], gradient: RGB[] | null): [SchemeColors, SchemeColors] {
+  if (gradient && gradient.length >= 2) {
+    const reversed = [...gradient].reverse();
+    const bgA = `linear-gradient(135deg, ${gradient
+      .map((c, i) => `${rgbToHex(c.r, c.g, c.b)} ${pctOf(i, gradient.length)}%`)
+      .join(', ')})`;
+    const bgB = `linear-gradient(315deg, ${reversed
+      .map((c, i) => `${rgbToHex(c.r, c.g, c.b)} ${pctOf(i, reversed.length)}%`)
+      .join(', ')})`;
+    return [
+      { bgColor: bgA, fontColor: autoFontColor(gradientMidColor(gradient)) },
+      { bgColor: bgB, fontColor: autoFontColor(gradientMidColor(reversed)) },
+    ];
   }
 
-  let c1: RGB;
-  let c2: RGB;
-  if (best && bestContrast >= MIN_PAIR_CONTRAST) {
-    [c1, c2] = best;
-  } else {
-    // 主色互相对比都不够：用最主要的主色配黑/白
-    c1 = palette[0] ?? WHITE;
-    c2 = contrastRatioRgb(c1, BLACK) >= contrastRatioRgb(c1, WHITE) ? BLACK : WHITE;
-  }
-
+  const c1 = palette[0] ?? WHITE;
+  const c2 = palette[1] ?? palette[0] ?? BLACK;
   const hex1 = rgbToHex(c1.r, c1.g, c1.b);
   const hex2 = rgbToHex(c2.r, c2.g, c2.b);
   return [
-    { bgColor: hex1, fontColor: hex2 },
-    { bgColor: hex2, fontColor: hex1 },
+    { bgColor: hex1, fontColor: autoFontColor(c1) },
+    { bgColor: hex2, fontColor: autoFontColor(c2) },
   ];
+}
+
+/** 渐变 stop 的位置百分比。 */
+function pctOf(i: number, len: number): number {
+  return len <= 1 ? 0 : Math.round((i / (len - 1)) * 100);
 }
 
 /** 量化像素到 bucket，聚合频次与平均色，并算加权分。 */
@@ -217,4 +259,168 @@ function pickTopColors(buckets: Map<number, Bucket>, maxColors: number): Bucket[
     picked.push(cand);
   }
   return picked;
+}
+
+// ==================== 渐变检测 ====================
+
+/** 分带数：把图片沿某方向切成若干带，估计带内/带间色彩分布。 */
+const GRAD_BANDS = 10;
+/** 带内方差占总方差比例上限：越低说明颜色越「随位置平滑变化」（=渐变）。 */
+const GRAD_WITHIN_RATIO_MAX = 0.18;
+/** 渐变首尾色差平方下限：太接近说明几乎纯色，不算渐变。 */
+const GRAD_ENDPOINT_DIST_SQ_MIN = 40 * 40;
+/** 相邻 stop 合并阈值（色差平方），多色渐变去重用。 */
+const GRAD_STOP_MERGE_SQ = 24 * 24;
+/** 渐变最多保留的 stop 数（多色渐变）。 */
+const GRAD_MAX_STOPS = 5;
+
+interface BandAcc {
+  count: number;
+  r: number;
+  g: number;
+  b: number;
+  /** 各通道平方和，用于带内方差 */
+  sqr: number;
+  sqg: number;
+  sqb: number;
+}
+
+/** 四个投影方向：水平 / 垂直 / 两对角。 */
+type Direction = 'h' | 'v' | 'd1' | 'd2';
+const DIRECTIONS: Direction[] = ['h', 'v', 'd1', 'd2'];
+
+/** 像素 (x,y) 在某方向上的归一化投影 t∈[0,1]。 */
+function project(dir: Direction, x: number, y: number, w: number, h: number): number {
+  switch (dir) {
+    case 'h':
+      return w <= 1 ? 0 : x / (w - 1);
+    case 'v':
+      return h <= 1 ? 0 : y / (h - 1);
+    case 'd1':
+      return (x / Math.max(1, w - 1) + y / Math.max(1, h - 1)) / 2;
+    case 'd2':
+      return (x / Math.max(1, w - 1) + (1 - y / Math.max(1, h - 1))) / 2;
+  }
+}
+
+/**
+ * 检测整图是否为「沿某方向平滑过渡」的渐变（含多色渐变）。
+ * @returns 是渐变则返回有序 stop 颜色数组（≥2），否则 null。
+ */
+function detectGradient(data: Uint8ClampedArray, w: number, h: number): RGB[] | null {
+  // 全局均值与总方差
+  let gr = 0;
+  let gg = 0;
+  let gb = 0;
+  let n = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 125) continue;
+    gr += data[i];
+    gg += data[i + 1];
+    gb += data[i + 2];
+    n++;
+  }
+  if (n === 0) return null;
+  gr /= n;
+  gg /= n;
+  gb /= n;
+  let totalVar = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 125) continue;
+    totalVar += (data[i] - gr) ** 2 + (data[i + 1] - gg) ** 2 + (data[i + 2] - gb) ** 2;
+  }
+  totalVar /= n;
+  if (totalVar < 1) return null; // 几乎纯色，不是渐变
+
+  let bestDir: Direction | null = null;
+  let bestRatio = Infinity;
+  let bestBands: BandAcc[] = [];
+
+  for (const dir of DIRECTIONS) {
+    const bands: BandAcc[] = Array.from({ length: GRAD_BANDS }, () => ({
+      count: 0,
+      r: 0,
+      g: 0,
+      b: 0,
+      sqr: 0,
+      sqg: 0,
+      sqb: 0,
+    }));
+    let idx = 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++, idx += 4) {
+        if (data[idx + 3] < 125) continue;
+        const t = project(dir, x, y, w, h);
+        const bi = Math.min(GRAD_BANDS - 1, Math.max(0, Math.floor(t * GRAD_BANDS)));
+        const band = bands[bi];
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        band.count++;
+        band.r += r;
+        band.g += g;
+        band.b += b;
+        band.sqr += r * r;
+        band.sqg += g * g;
+        band.sqb += b * b;
+      }
+    }
+    // 带内方差（各带方差按像素数加权平均）
+    let withinVar = 0;
+    let filled = 0;
+    for (const band of bands) {
+      if (band.count === 0) continue;
+      filled++;
+      const mr = band.r / band.count;
+      const mg = band.g / band.count;
+      const mb = band.b / band.count;
+      const vr = band.sqr / band.count - mr * mr;
+      const vg = band.sqg / band.count - mg * mg;
+      const vb = band.sqb / band.count - mb * mb;
+      withinVar += (band.count / n) * (vr + vg + vb);
+    }
+    if (filled < GRAD_BANDS) continue; // 有空带，方向不连续，跳过
+    const ratio = withinVar / totalVar;
+    if (ratio < bestRatio) {
+      bestRatio = ratio;
+      bestDir = dir;
+      bestBands = bands;
+    }
+  }
+
+  if (!bestDir || bestRatio > GRAD_WITHIN_RATIO_MAX) return null;
+
+  // 还原有序 stop 颜色
+  const stops: RGB[] = bestBands
+    .filter((b) => b.count > 0)
+    .map((b) => ({ r: b.r / b.count, g: b.g / b.count, b: b.b / b.count }));
+  if (stops.length < 2) return null;
+
+  // 首尾色差太小 → 视为纯色
+  if (distSq(stops[0], stops[stops.length - 1]) < GRAD_ENDPOINT_DIST_SQ_MIN) return null;
+
+  return mergeStops(stops);
+}
+
+/** 合并相邻相近的 stop，保留首尾，最多 GRAD_MAX_STOPS 个，得到简洁多色渐变。 */
+function mergeStops(stops: RGB[]): RGB[] {
+  const merged: RGB[] = [stops[0]];
+  for (let i = 1; i < stops.length; i++) {
+    const last = merged[merged.length - 1];
+    if (distSq(last, stops[i]) >= GRAD_STOP_MERGE_SQ) {
+      merged.push(stops[i]);
+    }
+  }
+  // 确保包含真实首尾
+  const tail = stops[stops.length - 1];
+  if (distSq(merged[merged.length - 1], tail) > 1) merged.push(tail);
+  if (merged.length <= GRAD_MAX_STOPS) return merged;
+
+  // 超出则等距下采样到 GRAD_MAX_STOPS 个（保头保尾）
+  const out: RGB[] = [];
+  for (let k = 0; k < GRAD_MAX_STOPS; k++) {
+    const pos = Math.round((k / (GRAD_MAX_STOPS - 1)) * (merged.length - 1));
+    out.push(merged[pos]);
+  }
+  return out;
 }

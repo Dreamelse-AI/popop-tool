@@ -1,67 +1,49 @@
 /**
- * 情绪配色库状态。
+ * 情绪配色库状态（纯前端，无服务器存储）。
  *
  * 职责：
- *   - 加载/保存/删除服务端记录
  *   - 处理一批「拖入/选择/粘贴图片 → 提取主色 → AI 命名 → 生成待确认草稿」
- *   - 多张图各自成一条草稿，字段可编辑，逐条或批量保存
+ *   - 多张图各自成一条草稿，字段可编辑
+ *   - 逐条或批量导出为 CSV 色值表下载（不落服务器、不存本地）
  *
- * 写链路：图片 base64 经 /api/palette/save 落到服务端文件存储（非浏览器本地）。
+ * 配色规则：字色按底色深浅自动黑/白，由 paletteExtractor 产出，用户不手改字色。
  */
 
 import { create } from 'zustand';
-import type { PaletteDraft, PaletteEntry, PaletteScheme } from '@/types/palette';
-import { listPalettes, savePalette, deletePalette, uploadPaletteImage } from '@/services/paletteClient';
+import type { PaletteDraft, PaletteScheme } from '@/types/palette';
 import { extractPalette } from '@/services/paletteExtractor';
 import { nameColors } from '@/services/paletteNamer';
 import { fileToDataUrl } from './fileToDataUrl';
+import { downloadPaletteCsv } from './exportCsv';
 
-type ListStatus = 'idle' | 'loading' | 'ready' | 'error';
-
-/** 一条待确认草稿（带本地 key，便于多张并存时定位编辑/删除/保存）。 */
+/** 一条待确认草稿（带本地 key，便于多张并存时定位编辑/删除）。 */
 export interface DraftItem extends PaletteDraft {
-  /** 本地唯一 key（非后端 id），用于列表渲染与定位 */
+  /** 本地唯一 key，用于列表渲染与定位 */
   key: string;
-  /** 该草稿是否正在保存 */
-  saving: boolean;
-  /** 该草稿保存错误 */
-  error: string | null;
 }
 
 interface PaletteState {
-  items: PaletteEntry[];
-  total: number;
-  listStatus: ListStatus;
-  listError: string | null;
-
   /** 待确认草稿队列（多张图各一条） */
   drafts: DraftItem[];
   /** 正在分析的图片数量（>0 显示分析中） */
   analyzingCount: number;
   /** 分析阶段错误（最近一次） */
   analyzeError: string | null;
-  /** 正在删除的 id */
-  deletingId: string | null;
 
-  load: () => Promise<void>;
   /** 处理一批用户拖入/选择/粘贴的文件：逐个分析并加入草稿队列 */
   analyzeFiles: (files: File[]) => Promise<void>;
   /** 编辑某条草稿字段 */
   updateDraft: (key: string, patch: Partial<PaletteDraft>) => void;
   /** 编辑某条草稿里某套方案的字段（schemeIndex: 0|1） */
   updateScheme: (key: string, schemeIndex: number, patch: Partial<PaletteScheme>) => void;
-  /** 互换某条草稿里某套方案的底色/字色 */
-  swapScheme: (key: string, schemeIndex: number) => void;
   /** 丢弃某条草稿 */
   discardDraft: (key: string) => void;
   /** 丢弃全部草稿 */
   discardAllDrafts: () => void;
-  /** 保存某条草稿为永久记录 */
-  saveDraft: (key: string) => Promise<void>;
-  /** 保存全部草稿 */
-  saveAllDrafts: () => Promise<void>;
-  /** 删除一条记录 */
-  remove: (id: string) => Promise<void>;
+  /** 导出某条草稿为 CSV 下载 */
+  exportDraft: (key: string) => void;
+  /** 导出全部草稿为 CSV 下载 */
+  exportAllDrafts: () => void;
 }
 
 let keySeq = 0;
@@ -71,28 +53,9 @@ function nextKey(): string {
 }
 
 export const usePaletteStore = create<PaletteState>((set, get) => ({
-  items: [],
-  total: 0,
-  listStatus: 'idle',
-  listError: null,
-
   drafts: [],
   analyzingCount: 0,
   analyzeError: null,
-  deletingId: null,
-
-  load: async () => {
-    set({ listStatus: 'loading', listError: null });
-    try {
-      const res = await listPalettes();
-      set({ items: res.items, total: res.total, listStatus: 'ready' });
-    } catch (e) {
-      set({
-        listStatus: 'error',
-        listError: e instanceof Error ? e.message : '加载失败',
-      });
-    }
-  },
 
   analyzeFiles: async (files) => {
     const images = files.filter((f) => f.type.startsWith('image/'));
@@ -118,8 +81,6 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
             ],
             colors,
             imageDataUrl,
-            saving: false,
-            error: null,
           };
           set((s) => ({ drafts: [...s.drafts, draft], analyzingCount: s.analyzingCount - 1 }));
         } catch (e) {
@@ -151,88 +112,27 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
       ),
     })),
 
-  swapScheme: (key, schemeIndex) =>
-    set((s) => ({
-      drafts: s.drafts.map((d) =>
-        d.key === key
-          ? {
-              ...d,
-              schemes: d.schemes.map((sc, i) =>
-                i === schemeIndex
-                  ? { ...sc, bgColor: sc.fontColor, fontColor: sc.bgColor }
-                  : sc,
-              ),
-            }
-          : d,
-      ),
-    })),
-
   discardDraft: (key) =>
     set((s) => ({ drafts: s.drafts.filter((d) => d.key !== key) })),
 
   discardAllDrafts: () => set({ drafts: [], analyzeError: null }),
 
-  saveDraft: async (key) => {
+  exportDraft: (key) => {
     const draft = get().drafts.find((d) => d.key === key);
-    if (!draft || draft.saving) return;
-    set((s) => ({
-      drafts: s.drafts.map((d) => (d.key === key ? { ...d, saving: true, error: null } : d)),
-    }));
-    try {
-      const imageUrl = await uploadPaletteImage(draft.imageDataUrl);
-      await savePalette({
-        id: draft.id,
-        schemes: draft.schemes,
-        colors: draft.colors,
-        imageUrl,
-      });
-      // 保存成功：移除该草稿
-      set((s) => ({ drafts: s.drafts.filter((d) => d.key !== key) }));
-      await get().load();
-    } catch (e) {
-      set((s) => ({
-        drafts: s.drafts.map((d) =>
-          d.key === key
-            ? { ...d, saving: false, error: e instanceof Error ? e.message : '保存失败' }
-            : d,
-        ),
-      }));
-    }
+    if (draft) downloadPaletteCsv([draft]);
   },
 
-  saveAllDrafts: async () => {
-    // 串行保存，避免并发写与 id 冲突；逐条复用 saveDraft
-    const keys = get().drafts.map((d) => d.key);
-    for (const key of keys) {
-      await get().saveDraft(key);
-    }
-  },
-
-  remove: async (id) => {
-    set({ deletingId: id });
-    try {
-      await deletePalette(id);
-      set((s) => ({
-        items: s.items.filter((i) => i.id !== id),
-        total: Math.max(0, s.total - 1),
-      }));
-    } catch (e) {
-      set({ listError: e instanceof Error ? e.message : '删除失败' });
-    } finally {
-      set({ deletingId: null });
-    }
+  exportAllDrafts: () => {
+    const { drafts } = get();
+    if (drafts.length > 0) downloadPaletteCsv(drafts);
   },
 }));
 
 /**
- * 保证 id 唯一：既不与已存记录冲突，也不与当前草稿队列里的 id 冲突。
- * 冲突则追加短随机后缀。
+ * 保证 id 唯一：不与当前草稿队列里的 id 冲突，冲突则追加短随机后缀。
  */
 function uniqueId(base: string, state: PaletteState): string {
-  const used = new Set<string>([
-    ...state.items.map((i) => i.id),
-    ...state.drafts.map((d) => d.id),
-  ]);
+  const used = new Set<string>(state.drafts.map((d) => d.id));
   if (!used.has(base)) return base;
   let candidate = base;
   while (used.has(candidate)) {

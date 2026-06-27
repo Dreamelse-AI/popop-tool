@@ -48,12 +48,14 @@ async function nameViaApimart(
   signal?: AbortSignal,
 ): Promise<NamingResult> {
   const userContent = [
-    '你是一名资深品牌视觉与色彩设计师。同一组颜色有两套配色方案：',
+    '你是一名配色命名助手。同一组颜色有两套配色方案：',
     '方案A 以颜色1为底，方案B 以颜色2为底，基调不同，需各自独立命名与定情绪。',
+    '命名要求：直白、好懂、一眼能对应到情绪或场景，不要文绉绉、不要古风诗意、不要生僻字。',
+    '可以用「颜色/物象 + 情绪」的大白话组合，例如：暖橘活力、雾蓝安静、奶白温柔、深夜冷静、薄荷清爽。',
     '严格只返回一个 JSON 对象，不要任何解释、不要 markdown 代码块包裹。JSON 字段：',
-    '- "id": 英文小写连字符 slug（2-4 个单词，如 "warm-dusk-glow"），只含 a-z 0-9 和连字符。',
-    '- "nameA": 方案A（底色 ' + schemeBgColors[0] + '）的中文名字，最多 4 字，富有画面感。绝不超过 4 字。',
-    '- "nameB": 方案B（底色 ' + schemeBgColors[1] + '）的中文名字，最多 4 字，富有画面感。绝不超过 4 字。',
+    '- "id": 英文小写连字符 slug（2-4 个单词，如 "warm-orange-energy"），只含 a-z 0-9 和连字符。',
+    '- "nameA": 方案A（底色 ' + schemeBgColors[0] + '）的中文名字，最多 4 字，直白贴切、对应情绪。绝不超过 4 字。',
+    '- "nameB": 方案B（底色 ' + schemeBgColors[1] + '）的中文名字，最多 4 字，直白贴切、对应情绪。绝不超过 4 字。',
     '- "moodA": 方案A 的情绪词，2-4 个中文词用「、」分隔。',
     '- "moodB": 方案B 的情绪词，2-4 个中文词用「、」分隔。',
     '',
@@ -69,7 +71,7 @@ async function nameViaApimart(
         {
           role: 'system',
           content:
-            'You are a senior color and brand designer who names color palettes. You always reply with a single valid JSON object and nothing else.',
+            'You name color palettes with short, plain, easy-to-understand Chinese names that clearly match a mood or scene. Avoid poetic, archaic, or obscure wording. You always reply with a single valid JSON object and nothing else.',
         },
         { role: 'user', content: userContent },
       ],
