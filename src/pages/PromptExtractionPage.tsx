@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useExtractionStore, type PromptGroup } from '@/features/prompt-extraction/store';
+import { buildFullPrompt } from '@/services/promptExtractor';
 import { filesToDataUrls } from '@/features/sticker/fileToDataUrl';
 import { downloadImage } from '@/utils/downloadImage';
 import { ToolHeader } from '@/components/ToolHeader';
@@ -19,7 +20,7 @@ export function PromptExtractionPage() {
     setRatio,
     setResolution,
     addImages,
-    setFullPrompt,
+    setContentPrompt,
     setStylePrompt,
     regenerate,
     reanalyze,
@@ -106,7 +107,7 @@ export function PromptExtractionPage() {
 
         {groups.length === 0 ? (
           <div className="flex min-h-48 items-center justify-center rounded-pop-lg border-2 border-dashed border-cream-2 bg-paper/40 text-center text-sm text-ink-3">
-            上传图片后，每张图会在下方生成一组：左侧源图、中间提示词（可改后重新生成）、右侧验证效果
+            上传图片后，每张图会在下方生成一组：左侧源图、中间内容词+画风词（可改，自动拼成完整提示词）、右侧验证效果
           </div>
         ) : (
           <div className="flex flex-col gap-5">
@@ -114,7 +115,7 @@ export function PromptExtractionPage() {
               <GroupRow
                 key={group.id}
                 group={group}
-                onFullPromptChange={(v) => setFullPrompt(group.id, v)}
+                onContentPromptChange={(v) => setContentPrompt(group.id, v)}
                 onStylePromptChange={(v) => setStylePrompt(group.id, v)}
                 onRegenerate={() => void regenerate(group.id)}
                 onReanalyze={() => void reanalyze(group.id)}
@@ -132,7 +133,7 @@ export function PromptExtractionPage() {
 
 interface GroupRowProps {
   group: PromptGroup;
-  onFullPromptChange: (v: string) => void;
+  onContentPromptChange: (v: string) => void;
   onStylePromptChange: (v: string) => void;
   onRegenerate: () => void;
   onReanalyze: () => void;
@@ -143,7 +144,7 @@ interface GroupRowProps {
 /** 单组：左源图 · 中提示词面板（可改） · 右验证效果，三列横向排布，往下堆叠。 */
 function GroupRow({
   group,
-  onFullPromptChange,
+  onContentPromptChange,
   onStylePromptChange,
   onRegenerate,
   onReanalyze,
@@ -154,6 +155,7 @@ function GroupRow({
   const generating = group.status === 'generating';
   const isError = group.status === 'error';
   const busy = analyzing || generating;
+  const fullPrompt = buildFullPrompt(group.contentPrompt, group.stylePrompt);
 
   return (
     <div className="pop-card grid grid-cols-1 gap-4 p-4 lg:grid-cols-[220px_1fr_260px]">
@@ -181,11 +183,11 @@ function GroupRow({
       {/* [PROMPTS] 中：提示词面板 */}
       <div className="flex flex-col gap-3">
         <div>
-          <div className="pop-label mb-1.5">完整提示词</div>
+          <div className="pop-label mb-1.5">内容提示词</div>
           <textarea
-            value={group.fullPrompt}
-            onChange={(e) => onFullPromptChange(e.target.value)}
-            placeholder={analyzing ? '分析中…' : '分析完成后显示，可手动修改'}
+            value={group.contentPrompt}
+            onChange={(e) => onContentPromptChange(e.target.value)}
+            placeholder={analyzing ? '分析中…' : '主体 / 场景 / 动作 / 氛围（不含画风），可手动修改'}
             disabled={busy}
             className="pop-textarea h-24 w-full text-sm leading-relaxed"
           />
@@ -195,16 +197,25 @@ function GroupRow({
           <textarea
             value={group.stylePrompt}
             onChange={(e) => onStylePromptChange(e.target.value)}
-            placeholder={analyzing ? '分析中…' : '剥离主体的可迁移画风，供画风工具复用'}
+            placeholder={analyzing ? '分析中…' : '媒介 / 技法 / 光影 / 色彩 / 质感，可迁移，供画风工具复用'}
             disabled={busy}
             className="pop-textarea h-20 w-full text-sm leading-relaxed"
           />
+        </div>
+        <div>
+          <div className="pop-label mb-1.5 flex items-center gap-1.5">
+            完整提示词
+            <span className="font-normal text-[11px] text-ink-3">（内容 + 画风，自动拼接，出图用此）</span>
+          </div>
+          <div className="max-h-28 overflow-auto whitespace-pre-wrap rounded-pop border-2 border-cream-2 bg-soft p-2.5 text-xs leading-relaxed text-ink-2">
+            {fullPrompt || (analyzing ? '分析中…' : '内容词与画风词拼接后显示')}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={onRegenerate}
-            disabled={busy || !group.fullPrompt.trim()}
+            disabled={busy || !fullPrompt}
             className="pop-btn-primary"
           >
             {generating ? '生成中…' : '重新生成'}
