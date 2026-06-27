@@ -5,13 +5,13 @@ import {
   pickColorWithEyeDropper,
   pickColorFromImage,
 } from '@/services/eyedropper';
-import { fontColorForBg } from '@/services/paletteExtractor';
 
 interface PaletteDraftEditorProps {
   draft: PaletteDraft;
   index?: number;
   onChangeMeta: (patch: Partial<Pick<PaletteDraft, 'id'>>) => void;
   onChangeScheme: (schemeIndex: number, patch: Partial<PaletteScheme>) => void;
+  onSwapScheme: (schemeIndex: number) => void;
   onExport: () => void;
   onDiscard: () => void;
 }
@@ -31,43 +31,47 @@ function clampName(v: string): string {
   return Array.from(v).slice(0, 4).join('');
 }
 
+/** 当前激活的取色目标：第几套方案的底色/字色。 */
+interface ActiveTarget {
+  schemeIndex: number;
+  field: 'bgColor' | 'fontColor';
+}
+
 /**
  * 待确认草稿编辑器：展示原图 + 主色板 + 两套配色方案。
- * - 两套方案平等（各自纯色或渐变底），情绪词可不同。
- * - 字色按底色深浅自动黑/白，用户不手改；改底色后自动重算（渐变底不重算）。
- * - 点主色板色块 → 填入当前激活方案的底色（同时重算字色）。
- * - 底色输入旁有吸管：原生 EyeDropper 全屏吸色，降级为点原图取色。
+ * - 纯色底方案：底色/字色都来自主色板，可编辑、可互换、各自吸管取色。
+ * - 渐变底方案：底色为渐变（只读），字色按渐变明度自动黑/白（只读）。
+ * - 点主色板色块 → 填入当前激活的颜色输入框（仅纯色方案）。
+ * - 颜色输入旁有吸管：原生 EyeDropper 全屏吸色，降级为点原图取色。
  */
 export function PaletteDraftEditor({
   draft,
   index,
   onChangeMeta,
   onChangeScheme,
+  onSwapScheme,
   onExport,
   onDiscard,
 }: PaletteDraftEditorProps) {
   const idValid = /^[a-z0-9][a-z0-9-]*$/.test(draft.id);
   const canExport = idValid && draft.id.length > 0;
 
-  // 当前激活的「填底色」方案（点主色板/点原图时填入这套），默认方案A
-  const [activeScheme, setActiveScheme] = useState(0);
+  // 激活的取色目标（点主色板/点原图时填入这里），默认方案A底色
+  const [active, setActive] = useState<ActiveTarget>({ schemeIndex: 0, field: 'bgColor' });
   // 是否进入「点原图取色」模式（仅在原生吸管不支持时用）
   const [pickFromImage, setPickFromImage] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
-  /** 改底色：同步按新底色重算字色（渐变底保持原字色）。 */
-  const changeBg = (schemeIndex: number, bgColor: string) => {
-    const patch: Partial<PaletteScheme> = { bgColor };
-    const auto = fontColorForBg(bgColor);
-    if (auto) patch.fontColor = auto;
-    onChangeScheme(schemeIndex, patch);
+  /** 把颜色写入当前激活的目标字段（渐变底字段不可被填，调用方已规避）。 */
+  const applyToActive = (hex: string) => {
+    onChangeScheme(active.schemeIndex, { [active.field]: hex } as Partial<PaletteScheme>);
   };
 
-  const handleEyeDropper = async (schemeIndex: number) => {
-    setActiveScheme(schemeIndex);
+  const handleEyeDropper = async (target: ActiveTarget) => {
+    setActive(target);
     if (supportsEyeDropper()) {
       const hex = await pickColorWithEyeDropper();
-      if (hex) changeBg(schemeIndex, hex);
+      if (hex) onChangeScheme(target.schemeIndex, { [target.field]: hex } as Partial<PaletteScheme>);
     } else {
       setPickFromImage(true);
     }
@@ -76,7 +80,7 @@ export function PaletteDraftEditor({
   const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
     if (!pickFromImage || !imgRef.current) return;
     const hex = pickColorFromImage(imgRef.current, e.clientX, e.clientY);
-    if (hex) changeBg(activeScheme, hex);
+    if (hex) applyToActive(hex);
     setPickFromImage(false);
   };
 
@@ -117,15 +121,15 @@ export function PaletteDraftEditor({
           )}
           <div className="mt-2">
             <span className="mb-1 block font-mono text-[11px] font-semibold text-ink-2">
-              主色板（点击填入方案 {activeScheme === 0 ? 'A' : 'B'} 底色）
+              主色板（点击填入选中输入框）
             </span>
             <div className="flex flex-wrap gap-1.5">
               {draft.colors.map((c) => (
                 <button
                   key={c}
                   type="button"
-                  title={`${c}（填入方案 ${activeScheme === 0 ? 'A' : 'B'}）`}
-                  onClick={() => changeBg(activeScheme, c)}
+                  title={`${c}（点击填入）`}
+                  onClick={() => applyToActive(c)}
                   className="h-7 w-7 rounded-md border-2 border-ink transition hover:scale-110"
                   style={{ backgroundColor: c }}
                 />
@@ -158,11 +162,11 @@ export function PaletteDraftEditor({
               key={i}
               schemeIndex={i}
               scheme={scheme}
-              isActive={activeScheme === i}
-              onActivate={() => setActiveScheme(i)}
+              active={active}
+              onSelectField={(field) => setActive({ schemeIndex: i, field })}
               onChange={(patch) => onChangeScheme(i, patch)}
-              onChangeBg={(v) => changeBg(i, v)}
-              onEyeDropper={() => void handleEyeDropper(i)}
+              onSwap={() => onSwapScheme(i)}
+              onEyeDropper={(field) => void handleEyeDropper({ schemeIndex: i, field })}
             />
           ))}
         </div>
@@ -185,38 +189,40 @@ export function PaletteDraftEditor({
 interface SchemeCardProps {
   schemeIndex: number;
   scheme: PaletteScheme;
-  isActive: boolean;
-  onActivate: () => void;
+  active: ActiveTarget;
+  onSelectField: (field: 'bgColor' | 'fontColor') => void;
   onChange: (patch: Partial<PaletteScheme>) => void;
-  onChangeBg: (v: string) => void;
-  onEyeDropper: () => void;
+  onSwap: () => void;
+  onEyeDropper: (field: 'bgColor' | 'fontColor') => void;
 }
 
-/** 单套方案卡片：名字 + 预览 + 底色（可编辑/吸管）+ 字色（自动只读）+ 情绪词。 */
+/**
+ * 单套方案卡片：名字 + 预览 + 情绪词。
+ * - 纯色底：底色/字色可编辑（点选中 + 吸管），可互换底/字。
+ * - 渐变底：底色渐变只读，字色按明度自动黑/白只读，无互换。
+ */
 function SchemeCard({
   schemeIndex,
   scheme,
-  isActive,
-  onActivate,
+  active,
+  onSelectField,
   onChange,
-  onChangeBg,
+  onSwap,
   onEyeDropper,
 }: SchemeCardProps) {
   const label = schemeIndex === 0 ? '方案 A' : '方案 B';
   const gradient = isGradient(scheme.bgColor);
   return (
-    <div
-      onFocusCapture={onActivate}
-      onClickCapture={onActivate}
-      className={
-        isActive
-          ? 'block w-full rounded-pop border-2 border-ink p-2.5 text-left ring-2 ring-cream-2'
-          : 'block w-full rounded-pop border-2 border-ink p-2.5 text-left'
-      }
-    >
+    <div className="rounded-pop border-2 border-ink p-2.5">
       <div className="mb-2 flex items-center justify-between">
         <span className="font-display text-xs font-extrabold text-ink">{label}</span>
-        <span className="font-mono text-[10px] text-ink-3">{gradient ? '渐变底' : '纯色底'}</span>
+        {gradient ? (
+          <span className="font-mono text-[10px] text-ink-3">渐变底</span>
+        ) : (
+          <button type="button" onClick={onSwap} className="pop-link text-[11px]" title="互换底色/字色">
+            ⇄ 互换
+          </button>
+        )}
       </div>
 
       <div
@@ -238,34 +244,52 @@ function SchemeCard({
       </label>
 
       {gradient ? (
-        <div className="mt-1.5">
-          <span className="mb-1 block font-mono text-[11px] font-semibold text-ink-2">bgColor（渐变）</span>
-          <div className="flex items-center gap-1.5">
-            <span
-              className="h-8 w-8 shrink-0 rounded-md border-2 border-ink"
-              style={{ background: scheme.bgColor }}
-            />
-            <code className="pop-input block w-full truncate font-mono text-[11px] text-ink-2" title={scheme.bgColor}>
-              {scheme.bgColor}
-            </code>
+        <>
+          <div className="mt-1.5">
+            <span className="mb-1 block font-mono text-[11px] font-semibold text-ink-2">bgColor（渐变）</span>
+            <div className="flex items-center gap-1.5">
+              <span
+                className="h-8 w-8 shrink-0 rounded-md border-2 border-ink"
+                style={{ background: scheme.bgColor }}
+              />
+              <code className="pop-input block w-full truncate font-mono text-[11px] text-ink-2" title={scheme.bgColor}>
+                {scheme.bgColor}
+              </code>
+            </div>
           </div>
-        </div>
+          <div className="mt-1.5">
+            <span className="mb-1 block font-mono text-[11px] font-semibold text-ink-2">
+              fontColor（按底色自动黑/白）
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span
+                className="h-8 w-8 shrink-0 rounded-md border-2 border-ink"
+                style={{ backgroundColor: isHex(scheme.fontColor) ? scheme.fontColor : undefined }}
+              />
+              <code className="pop-input block w-full font-mono text-xs text-ink-2">{scheme.fontColor}</code>
+            </div>
+          </div>
+        </>
       ) : (
-        <BgColorRow value={scheme.bgColor} onChange={onChangeBg} onEyeDropper={onEyeDropper} />
-      )}
-
-      <div className="mt-1.5">
-        <span className="mb-1 block font-mono text-[11px] font-semibold text-ink-2">
-          fontColor（按底色自动黑/白）
-        </span>
-        <div className="flex items-center gap-1.5">
-          <span
-            className="h-8 w-8 shrink-0 rounded-md border-2 border-ink"
-            style={{ backgroundColor: isHex(scheme.fontColor) ? scheme.fontColor : undefined }}
+        <>
+          <ColorRow
+            label="bgColor"
+            value={scheme.bgColor}
+            activeNow={active.schemeIndex === schemeIndex && active.field === 'bgColor'}
+            onSelect={() => onSelectField('bgColor')}
+            onChange={(v) => onChange({ bgColor: v })}
+            onEyeDropper={() => onEyeDropper('bgColor')}
           />
-          <code className="pop-input block w-full font-mono text-xs text-ink-2">{scheme.fontColor}</code>
-        </div>
-      </div>
+          <ColorRow
+            label="fontColor"
+            value={scheme.fontColor}
+            activeNow={active.schemeIndex === schemeIndex && active.field === 'fontColor'}
+            onSelect={() => onSelectField('fontColor')}
+            onChange={(v) => onChange({ fontColor: v })}
+            onEyeDropper={() => onEyeDropper('fontColor')}
+          />
+        </>
+      )}
 
       <label className="mt-1.5 block">
         <span className="mb-1 block font-mono text-[11px] font-semibold text-ink-2">mood（情绪词）</span>
@@ -280,18 +304,21 @@ function SchemeCard({
   );
 }
 
-interface BgColorRowProps {
+interface ColorRowProps {
+  label: string;
   value: string;
+  activeNow: boolean;
+  onSelect: () => void;
   onChange: (v: string) => void;
   onEyeDropper: () => void;
 }
 
-/** 纯色底行：色块 + hex 输入 + 吸管按钮。 */
-function BgColorRow({ value, onChange, onEyeDropper }: BgColorRowProps) {
+/** 颜色行：色块 + hex 输入（点输入激活为取色目标）+ 吸管按钮。 */
+function ColorRow({ label, value, activeNow, onSelect, onChange, onEyeDropper }: ColorRowProps) {
   const bg = isHex(value) ? value : undefined;
   return (
     <label className="mt-1.5 block">
-      <span className="mb-1 block font-mono text-[11px] font-semibold text-ink-2">bgColor</span>
+      <span className="mb-1 block font-mono text-[11px] font-semibold text-ink-2">{label}</span>
       <div className="flex items-center gap-1.5">
         <span
           className="h-8 w-8 shrink-0 rounded-md border-2 border-ink bg-soft"
@@ -299,16 +326,18 @@ function BgColorRow({ value, onChange, onEyeDropper }: BgColorRowProps) {
         />
         <input
           value={value}
+          onFocus={onSelect}
           onChange={(e) => onChange(e.target.value)}
-          className="pop-input w-full font-mono text-xs"
+          className={
+            activeNow
+              ? 'pop-input w-full font-mono text-xs ring-2 ring-cream-2'
+              : 'pop-input w-full font-mono text-xs'
+          }
           placeholder="#EAD9A2"
         />
         <button
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEyeDropper();
-          }}
+          onClick={onEyeDropper}
           title="吸管取色"
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border-2 border-ink bg-paper text-ink transition hover:bg-cream-soft active:translate-y-[1px]"
           aria-label="吸管取色"

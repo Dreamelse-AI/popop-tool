@@ -12,9 +12,10 @@
  *      判定方式 = 沿 水平/垂直/两对角 四个方向分带，找「带内方差最小」的方向，
  *      该方向带内方差占总方差比例足够低、且首尾色差足够大 → 认定为渐变。
  *   5. 两套方案：
- *      - 普通图：方案A = 主色1 纯色底，方案B = 主色2 纯色底；
- *      - 渐变图：方案A/B 均为渐变底（方向与起止色不同）。
- *      字色统一按底色深浅自动取黑/白（对比更高者），保证可读。
+ *      - 普通图（纯色底）：从主色板挑「彼此对比度最高且达标」的一对色 c1/c2，
+ *        方案A = c1 底 + c2 字，方案B = c2 底 + c1 字（互换）；挑不出达标对才用黑/白兜底。
+ *      - 渐变图：方案A/B 均为渐变底（方向与起止色不同），字色按渐变中点明度自动取黑/白。
+ *      （仅渐变背景用「自动黑/白字」，纯色背景用配色互换，字色来自主色板。）
  *
  * 全程本地，离线可跑；图片像素来自用户上传（同源/本地 dataURL，无 CORS 问题）。
  */
@@ -143,44 +144,21 @@ function autoFontColor(bg: RGB): string {
   return contrastRatioRgb(bg, BLACK) >= contrastRatioRgb(bg, WHITE) ? BLACK_HEX : WHITE_HEX;
 }
 
-/** 解析 #rgb / #rrggbb 为 RGB，非法返回 null。 */
-function parseHex(hex: string): RGB | null {
-  const s = hex.trim().replace(/^#/, '');
-  if (/^[0-9a-fA-F]{3}$/.test(s)) {
-    return {
-      r: parseInt(s[0] + s[0], 16),
-      g: parseInt(s[1] + s[1], 16),
-      b: parseInt(s[2] + s[2], 16),
-    };
-  }
-  if (/^[0-9a-fA-F]{6}$/.test(s)) {
-    return {
-      r: parseInt(s.slice(0, 2), 16),
-      g: parseInt(s.slice(2, 4), 16),
-      b: parseInt(s.slice(4, 6), 16),
-    };
-  }
-  return null;
-}
-
-/**
- * 给定纯色底（#hex），返回自动字色（黑/白）。
- * 供编辑器在用户改底色后实时重算字色用；非纯色 hex 返回 null（如渐变底，字色不重算）。
- */
-export function fontColorForBg(bgHex: string): string | null {
-  const rgb = parseHex(bgHex);
-  return rgb ? autoFontColor(rgb) : null;
-}
-
 /** 渐变底取「中点色」近似其整体明度，用于决定黑/白字。 */
 function gradientMidColor(stops: RGB[]): RGB {
   return stops[Math.floor(stops.length / 2)] ?? WHITE;
 }
 
+/** 一对颜色可作「底/字」的最低对比度（AA 正文 4.5，配色卡标题放宽到 3.5）。 */
+const MIN_PAIR_CONTRAST = 3.5;
+
 /**
  * 从主色板构造两套方案：
- *   - 渐变图：方案A/B 均为渐变底（135° / 315° 两个方向，起止/顺序不同），字色按中点明度自动黑/白；
- *   - 普通图：方案A = 主色1 纯色底，方案B = 主色2 纯色底，字色各自按明度自动黑/白。
+ *   - 渐变图：方案A/B 均为渐变底（135° / 315° 两个方向，起止/顺序不同），
+ *     字色按渐变中点明度自动取黑/白（仅渐变背景用自动黑白）。
+ *   - 纯色图：从主色板挑「彼此对比度最高且达标」的一对色 c1/c2，
+ *     方案A = c1 底 + c2 字，方案B = c2 底 + c1 字（互换）；
+ *     挑不出对比达标的一对时，才用首要主色 + 黑/白兜底，保证可读。
  */
 function buildSchemes(palette: RGB[], gradient: RGB[] | null): [SchemeColors, SchemeColors] {
   if (gradient && gradient.length >= 2) {
@@ -197,13 +175,34 @@ function buildSchemes(palette: RGB[], gradient: RGB[] | null): [SchemeColors, Sc
     ];
   }
 
-  const c1 = palette[0] ?? WHITE;
-  const c2 = palette[1] ?? palette[0] ?? BLACK;
+  // 纯色：找一对彼此对比度最高且达标的主色，A/B 互换底/字
+  let best: [RGB, RGB] | null = null;
+  let bestContrast = 0;
+  for (let i = 0; i < palette.length; i++) {
+    for (let j = i + 1; j < palette.length; j++) {
+      const c = contrastRatioRgb(palette[i], palette[j]);
+      if (c > bestContrast) {
+        bestContrast = c;
+        best = [palette[i], palette[j]];
+      }
+    }
+  }
+
+  let c1: RGB;
+  let c2: RGB;
+  if (best && bestContrast >= MIN_PAIR_CONTRAST) {
+    [c1, c2] = best;
+  } else {
+    // 主色互相对比都不够：用最主要的主色配黑/白
+    c1 = palette[0] ?? WHITE;
+    c2 = contrastRatioRgb(c1, BLACK) >= contrastRatioRgb(c1, WHITE) ? BLACK : WHITE;
+  }
+
   const hex1 = rgbToHex(c1.r, c1.g, c1.b);
   const hex2 = rgbToHex(c2.r, c2.g, c2.b);
   return [
-    { bgColor: hex1, fontColor: autoFontColor(c1) },
-    { bgColor: hex2, fontColor: autoFontColor(c2) },
+    { bgColor: hex1, fontColor: hex2 },
+    { bgColor: hex2, fontColor: hex1 },
   ];
 }
 
