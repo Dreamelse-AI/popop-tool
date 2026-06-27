@@ -8,6 +8,7 @@ import { StylePromptPage } from '@/pages/StylePromptPage';
 import { PalettePage } from '@/pages/PalettePage';
 import { BatchNameImagePage } from '@/pages/BatchNameImagePage';
 import { PromptExtractionPage } from '@/pages/PromptExtractionPage';
+import { IpExtendPage } from '@/pages/IpExtendPage';
 
 export const router = createBrowserRouter([
   { path: '/', element: <HomePage /> },
@@ -19,4 +20,5 @@ export const router = createBrowserRouter([
   { path: '/tools/palette', element: <PalettePage /> },
   { path: '/tools/batch-name-image', element: <BatchNameImagePage /> },
   { path: '/tools/prompt-extraction', element: <PromptExtractionPage /> },
+  { path: '/tools/ip-extend', element: <IpExtendPage /> },
 ]);
