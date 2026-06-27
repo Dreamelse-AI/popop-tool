@@ -264,8 +264,10 @@ function pickTopColors(buckets: Map<number, Bucket>, maxColors: number): Bucket[
 
 /** 分带数：把图片沿某方向切成若干带，估计带内/带间色彩分布。 */
 const GRAD_BANDS = 16;
-/** 带内方差占总方差比例上限：越低说明颜色越「随位置平滑变化」（=渐变）。 */
-const GRAD_WITHIN_RATIO_MAX = 0.18;
+/** 带内方差占总方差比例上限：越低说明颜色越「随位置平滑变化」（=渐变）。
+ * 放宽到 0.30：斜向/带纹理的真渐变投影到最近方向后，带内仍混了亮暗色、
+ * 方差偏高，0.18 会误杀；配合「平滑度闸」兜底防色块图，0.30 更稳。 */
+const GRAD_WITHIN_RATIO_MAX = 0.3;
 /** 渐变首尾色差平方下限：太接近说明几乎纯色，不算渐变。 */
 const GRAD_ENDPOINT_DIST_SQ_MIN = 40 * 40;
 /**
@@ -291,22 +293,28 @@ interface BandAcc {
   sqb: number;
 }
 
-/** 四个投影方向：水平 / 垂直 / 两对角。 */
-type Direction = 'h' | 'v' | 'd1' | 'd2';
-const DIRECTIONS: Direction[] = ['h', 'v', 'd1', 'd2'];
+/**
+ * 投影角度集合（度）：0°=水平、90°=垂直，加入斜向角度让斜向渐变能对齐方向。
+ * 角度越密，斜向渐变越容易被「对正」，带内方差越低，越不会被误杀。
+ */
+const GRAD_ANGLES_DEG = [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5];
 
-/** 像素 (x,y) 在某方向上的归一化投影 t∈[0,1]。 */
-function project(dir: Direction, x: number, y: number, w: number, h: number): number {
-  switch (dir) {
-    case 'h':
-      return w <= 1 ? 0 : x / (w - 1);
-    case 'v':
-      return h <= 1 ? 0 : y / (h - 1);
-    case 'd1':
-      return (x / Math.max(1, w - 1) + y / Math.max(1, h - 1)) / 2;
-    case 'd2':
-      return (x / Math.max(1, w - 1) + (1 - y / Math.max(1, h - 1))) / 2;
-  }
+/**
+ * 像素 (x,y) 沿某角度方向的归一化投影 t∈[0,1]。
+ * 把坐标归一化到 [0,1] 后点乘单位方向向量，再线性映射到 [0,1]。
+ */
+function projectAngle(angleRad: number, x: number, y: number, w: number, h: number): number {
+  const nx = w <= 1 ? 0 : x / (w - 1);
+  const ny = h <= 1 ? 0 : y / (h - 1);
+  const dx = Math.cos(angleRad);
+  const dy = Math.sin(angleRad);
+  // 投影范围：把 (0..1,0..1) 角点投到方向向量上，得到 [min,max] 再归一化
+  const proj = nx * dx + ny * dy;
+  // 该方向上投影的理论 min/max（四角中取极值）
+  const corners = [0, dx, dy, dx + dy];
+  const min = Math.min(...corners);
+  const max = Math.max(...corners);
+  return max === min ? 0 : (proj - min) / (max - min);
 }
 
 /**
@@ -338,11 +346,11 @@ function detectGradient(data: Uint8ClampedArray, w: number, h: number): RGB[] | 
   totalVar /= n;
   if (totalVar < 1) return null; // 几乎纯色，不是渐变
 
-  let bestDir: Direction | null = null;
   let bestRatio = Infinity;
-  let bestBands: BandAcc[] = [];
+  let bestBands: BandAcc[] | null = null;
 
-  for (const dir of DIRECTIONS) {
+  for (const deg of GRAD_ANGLES_DEG) {
+    const angleRad = (deg * Math.PI) / 180;
     const bands: BandAcc[] = Array.from({ length: GRAD_BANDS }, () => ({
       count: 0,
       r: 0,
@@ -356,7 +364,7 @@ function detectGradient(data: Uint8ClampedArray, w: number, h: number): RGB[] | 
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++, idx += 4) {
         if (data[idx + 3] < 125) continue;
-        const t = project(dir, x, y, w, h);
+        const t = projectAngle(angleRad, x, y, w, h);
         const bi = Math.min(GRAD_BANDS - 1, Math.max(0, Math.floor(t * GRAD_BANDS)));
         const band = bands[bi];
         const r = data[idx];
@@ -389,12 +397,11 @@ function detectGradient(data: Uint8ClampedArray, w: number, h: number): RGB[] | 
     const ratio = withinVar / totalVar;
     if (ratio < bestRatio) {
       bestRatio = ratio;
-      bestDir = dir;
       bestBands = bands;
     }
   }
 
-  if (!bestDir || bestRatio > GRAD_WITHIN_RATIO_MAX) return null;
+  if (!bestBands || bestRatio > GRAD_WITHIN_RATIO_MAX) return null;
 
   // 还原有序 stop 颜色（按带顺序的带均色）
   const stops: RGB[] = bestBands
