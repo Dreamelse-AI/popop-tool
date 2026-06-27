@@ -12,7 +12,6 @@ export function PalettePage() {
     analyzeFiles,
     updateDraft,
     updateScheme,
-    swapScheme,
     discardDraft,
     discardAllDrafts,
     exportDraft,
@@ -59,7 +58,6 @@ export function PalettePage() {
                 index={i}
                 onChangeMeta={(patch) => updateDraft(d.key, patch)}
                 onChangeScheme={(si, patch) => updateScheme(d.key, si, patch)}
-                onSwapScheme={(si) => swapScheme(d.key, si)}
                 onExport={() => exportDraft(d.key)}
                 onDiscard={() => discardDraft(d.key)}
               />

@@ -5,6 +5,8 @@
  *   - 处理一批「拖入/选择/粘贴图片 → 提取主色 → AI 命名 → 生成待确认草稿」
  *   - 多张图各自成一条草稿，字段可编辑
  *   - 逐条或批量导出为 CSV 色值表下载（不落服务器、不存本地）
+ *
+ * 配色规则：字色按底色深浅自动黑/白，由 paletteExtractor 产出，用户不手改字色。
  */
 
 import { create } from 'zustand';
@@ -34,8 +36,6 @@ interface PaletteState {
   updateDraft: (key: string, patch: Partial<PaletteDraft>) => void;
   /** 编辑某条草稿里某套方案的字段（schemeIndex: 0|1） */
   updateScheme: (key: string, schemeIndex: number, patch: Partial<PaletteScheme>) => void;
-  /** 互换某条草稿里某套方案的底色/字色 */
-  swapScheme: (key: string, schemeIndex: number) => void;
   /** 丢弃某条草稿 */
   discardDraft: (key: string) => void;
   /** 丢弃全部草稿 */
@@ -106,22 +106,6 @@ export const usePaletteStore = create<PaletteState>((set, get) => ({
               ...d,
               schemes: d.schemes.map((sc, i) =>
                 i === schemeIndex ? { ...sc, ...patch } : sc,
-              ),
-            }
-          : d,
-      ),
-    })),
-
-  swapScheme: (key, schemeIndex) =>
-    set((s) => ({
-      drafts: s.drafts.map((d) =>
-        d.key === key
-          ? {
-              ...d,
-              schemes: d.schemes.map((sc, i) =>
-                i === schemeIndex
-                  ? { ...sc, bgColor: sc.fontColor, fontColor: sc.bgColor }
-                  : sc,
               ),
             }
           : d,
