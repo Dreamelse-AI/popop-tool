@@ -84,6 +84,15 @@ const TOOLS: ToolEntry[] = [
     status: 'available',
     tag: 'AIGC',
   },
+  {
+    id: 'layout-param',
+    name: '排版参数提取',
+    description:
+      '拖入/粘贴图片（单张或批量），AI 读出字号/字重/对齐/锚点等排版规则，左图右参数可直接改代码，导出 JSON/CSV/Markdown 参数表。',
+    path: '/tools/layout-param',
+    status: 'available',
+    tag: '排版',
+  },
 ];
 
 export function HomePage() {
