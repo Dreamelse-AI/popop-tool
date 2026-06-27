@@ -75,6 +75,15 @@ const TOOLS: ToolEntry[] = [
     status: 'available',
     tag: 'AIGC',
   },
+  {
+    id: 'ip-extend',
+    name: 'IP 延展工具',
+    description:
+      '上传 IP 形象与表情包参考图，选动作/情绪/插画类型与场景，批量生成同一 IP 的延展插画，可本地下载。',
+    path: '/tools/ip-extend',
+    status: 'available',
+    tag: 'AIGC',
+  },
 ];
 
 export function HomePage() {
