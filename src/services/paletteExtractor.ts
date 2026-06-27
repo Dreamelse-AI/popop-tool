@@ -263,11 +263,18 @@ function pickTopColors(buckets: Map<number, Bucket>, maxColors: number): Bucket[
 // ==================== 渐变检测 ====================
 
 /** 分带数：把图片沿某方向切成若干带，估计带内/带间色彩分布。 */
-const GRAD_BANDS = 10;
+const GRAD_BANDS = 16;
 /** 带内方差占总方差比例上限：越低说明颜色越「随位置平滑变化」（=渐变）。 */
 const GRAD_WITHIN_RATIO_MAX = 0.18;
 /** 渐变首尾色差平方下限：太接近说明几乎纯色，不算渐变。 */
 const GRAD_ENDPOINT_DIST_SQ_MIN = 40 * 40;
+/**
+ * 平滑度闸：相邻带「最大单步色差 / 总步长」上限。
+ * - 真渐变：变化均摊到每一带，最大单步只占一小部分（≈1/带数），比例小。
+ * - 硬边色块（如两个/几个纯色块）：变化几乎全集中在分界处一两个台阶，
+ *   最大单步占比接近 1，会被此闸挡掉，避免误判为渐变。
+ */
+const GRAD_MAX_STEP_RATIO = 0.45;
 /** 相邻 stop 合并阈值（色差平方），多色渐变去重用。 */
 const GRAD_STOP_MERGE_SQ = 24 * 24;
 /** 渐变最多保留的 stop 数（多色渐变）。 */
@@ -389,7 +396,7 @@ function detectGradient(data: Uint8ClampedArray, w: number, h: number): RGB[] | 
 
   if (!bestDir || bestRatio > GRAD_WITHIN_RATIO_MAX) return null;
 
-  // 还原有序 stop 颜色
+  // 还原有序 stop 颜色（按带顺序的带均色）
   const stops: RGB[] = bestBands
     .filter((b) => b.count > 0)
     .map((b) => ({ r: b.r / b.count, g: b.g / b.count, b: b.b / b.count }));
@@ -397,6 +404,18 @@ function detectGradient(data: Uint8ClampedArray, w: number, h: number): RGB[] | 
 
   // 首尾色差太小 → 视为纯色
   if (distSq(stops[0], stops[stops.length - 1]) < GRAD_ENDPOINT_DIST_SQ_MIN) return null;
+
+  // 平滑度闸：渐变应「逐带均匀变化」，色块图则「变化集中在分界台阶」。
+  // 计算相邻带色差（欧氏距离）之和与最大单步，若最大单步占比过高 → 是色块拼接，不是渐变。
+  let totalStep = 0;
+  let maxStep = 0;
+  for (let i = 1; i < stops.length; i++) {
+    const step = Math.sqrt(distSq(stops[i - 1], stops[i]));
+    totalStep += step;
+    if (step > maxStep) maxStep = step;
+  }
+  if (totalStep <= 0) return null;
+  if (maxStep / totalStep > GRAD_MAX_STEP_RATIO) return null;
 
   return mergeStops(stops);
 }
